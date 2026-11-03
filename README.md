@@ -10,7 +10,9 @@ approve every lesson. A summary email goes out weekdays at 8:00 AM Eastern. Team
 who's who (photos, roles, the TC department), as in the Universal Team Hub; Managers are the admins and
 Settings → Permissions says what Team Leaders and Members may do.
 
-The user guide for the team: [`docs/guide/Title_Commitment_Agent_User_Guide.pdf`](docs/guide/Title_Commitment_Agent_User_Guide.pdf)
+The user guides, one per role (in the app: your photo → Help): [TC Guide](web/public/guides/Title_Commitment_Agent_TC_Guide.pdf),
+[Team Leader Guide](web/public/guides/Title_Commitment_Agent_Team_Leader_Guide.pdf),
+[Manager Guide](web/public/guides/Title_Commitment_Agent_Manager_Guide.pdf) (built by `docs/guide/build_guide.py`)
 (rebuilt with `uv run python docs/guide/build_guide.py`).
 
 Plans and decisions: [`docs/PLAN.md`](docs/PLAN.md) (the team's rules) and [`docs/PLAN-v2.md`](docs/PLAN-v2.md) (how

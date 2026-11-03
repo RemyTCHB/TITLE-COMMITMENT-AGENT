@@ -469,3 +469,35 @@ pre.code { margin: 0; padding: 14px; max-height: 320px; overflow: auto; border-r
 .person-chip[aria-pressed='true'] { border-color: var(--tchb-indigo-500); background: var(--tchb-indigo-050);
   color: var(--tchb-indigo-700); }
 .person-chip:disabled { cursor: default; }
+
+/* Help (pages/Help.jsx) */
+.help-guide { display: flex; align-items: center; gap: 16px; padding: 18px 20px; flex-wrap: wrap; }
+.help-guide.mine { border-color: var(--tchb-indigo-500); }
+.help-icon { width: 46px; height: 46px; flex: none; border-radius: 14px; display: flex; align-items: center;
+  justify-content: center; background: var(--tchb-indigo-050); color: var(--tchb-indigo-700); }
+.help-text { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.help-text b { font-family: var(--font-display); font-weight: 800; font-size: 18px; color: var(--tchb-indigo-700);
+  display: flex; align-items: center; gap: 8px; }
+.help-text span:not(.chip) { font-size: 14px; color: var(--text-muted); }
+.help-guide .toolbar { margin: 0; }
+.help-list { display: flex; flex-direction: column; gap: 10px; }
+.help-cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 14px; align-items: start; }
+.help-card { padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
+.help-card h2 { font-size: 18px; font-weight: 800; }
+.help-can { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.help-can li { display: flex; align-items: center; gap: 10px; }
+.help-can li.off { color: var(--text-muted); }
+.help-mark { width: 22px; height: 22px; flex: none; border-radius: 999px; display: flex; align-items: center;
+  justify-content: center; background: var(--tchb-green-050); color: var(--tchb-green-600); }
+.help-can li.off .help-mark { background: var(--tchb-gray-100); color: var(--text-muted); }
+.help-steps { margin: 0; display: flex; flex-direction: column; gap: 0; }
+.help-steps div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; padding: 9px 0;
+  border-top: 1px solid var(--border-default); }
+.help-steps div:first-child { border-top: none; padding-top: 0; }
+.help-steps dt { font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--tchb-indigo-700); }
+.help-steps dd { margin: 0; font-size: 14px; color: var(--text-body); }
+@media (max-width: 900px) { .help-cols { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) {
+  .help-steps div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .help-guide { padding: 16px; }
+}

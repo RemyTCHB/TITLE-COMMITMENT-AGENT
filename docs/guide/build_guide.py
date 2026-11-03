@@ -1,6 +1,10 @@
-"""Builds the branded Title Commitment Agent user guide (PDF) for the TCs and the Owner.
+"""Builds the branded Title Commitment Agent user guides (PDF), one per role, for the app's Help page:
 
-    uv run python docs/guide/build_guide.py      ->  docs/guide/Title_Commitment_Agent_User_Guide.pdf
+    uv run python docs/guide/build_guide.py      ->  web/public/guides/Title_Commitment_Agent_*_Guide.pdf
+
+TC Guide (Members): sections 1-13 and the Quick Reference Card. Team Leader Guide: the same plus section 14,
+approving lessons. Manager Guide: section 14 also covers Team, Settings and Connections. The page (Help, from your
+photo) offers each person theirs (web/src/pages/Help.jsx).
 
 Screenshots in docs/guide/shots/ come from the page on the local emulators with made-up sample deals
 (titleagent/demo.py, TITLE_AGENT_DEMO=1), never real ones.
@@ -39,7 +43,14 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 SHOTS = HERE / "shots"
 CROPS = HERE / ".crops"  # cropped copies of the screenshots, rebuilt each time (gitignored)
-OUT = HERE / "Title_Commitment_Agent_User_Guide.pdf"
+OUT = ROOT / "web" / "public" / "guides"  # served by the page at /guides/…
+# reader → (the guide's name, who it's for, its file); web/src/pages/Help.jsx links the same files
+GUIDES = {
+    "member": ("TC Guide", "For: Transaction Coordinators (Members)", "Title_Commitment_Agent_TC_Guide.pdf"),
+    "lead": ("Team Leader Guide", "For: Team Leaders (and anyone who approves lessons)",
+             "Title_Commitment_Agent_Team_Leader_Guide.pdf"),
+    "manager": ("Manager Guide", "For: Managers and the Owner", "Title_Commitment_Agent_Manager_Guide.pdf"),
+}
 LOGO = ROOT / "web" / "public" / "logo-full.png"
 APP = "Title Commitment Agent"
 
@@ -249,7 +260,7 @@ def cover(c, doc) -> None:
     c.drawString(MARGIN, PAGE_H - 4.65 * inch, "Agent")
     c.setFont("Baloo-Semi", 22)
     c.setFillColor(INDIGO)
-    c.drawString(MARGIN, PAGE_H - 5.2 * inch, "User Guide")
+    c.drawString(MARGIN, PAGE_H - 5.2 * inch, doc.guide[0])
     c.setFont("Nunito", 13)
     c.setFillColor(BODY)
     y = PAGE_H - 5.8 * inch
@@ -259,10 +270,10 @@ def cover(c, doc) -> None:
         y -= 19
     c.setFont("Nunito-Bold", 11)
     c.setFillColor(INK)
-    c.drawString(MARGIN, PAGE_H - 6.85 * inch, "For: Transaction Coordinators and the Owner")
+    c.drawString(MARGIN, PAGE_H - 6.85 * inch, doc.guide[1])
     c.setFont("Nunito", 10)
     c.setFillColor(MUTED)
-    c.drawString(MARGIN, PAGE_H - 7.12 * inch, f"Version 2.2 · {date.today():%B %Y} · title.totalchb.com")
+    c.drawString(MARGIN, PAGE_H - 7.12 * inch, f"Version 2.3 · {date.today():%B %Y} · title.totalchb.com")
     c.setFillColor(colors.white)
     c.setFont("Nunito-Bold", 9.5)
     c.drawString(MARGIN, 0.62 * inch, "Total Cash Home Buyers · Internal use only")
@@ -277,7 +288,7 @@ def inner(c, doc) -> None:
     c.drawImage(str(LOGO), MARGIN, PAGE_H - 0.62 * inch, width=1.2 * inch, height=1.2 * inch * lh / lw, mask="auto")
     c.setFont("Nunito-Semi", 8.5)
     c.setFillColor(MUTED)
-    c.drawRightString(PAGE_W - MARGIN, PAGE_H - 0.5 * inch, f"{APP} · User Guide")
+    c.drawRightString(PAGE_W - MARGIN, PAGE_H - 0.5 * inch, f"{APP} · {doc.guide[0]}")
     c.setStrokeColor(LINE)
     c.setLineWidth(0.6)
     c.line(MARGIN, PAGE_H - 0.72 * inch, PAGE_W - MARGIN, PAGE_H - 0.72 * inch)
@@ -293,26 +304,35 @@ SECTIONS = [
     f"What The {APP} Does", "Signing In", "Finding Your Way Around", "Reviewing A New Commitment",
     "Reading A Deal", "Working The List Every Day", "When The Agent Misses Something",
     "Updated Commitments And Re-Runs", "Exporting The List", "The Universal Team Hub Connection",
-    "Deals, Closing Out And The Daily Email", "For The Owner And Admins", "Good Habits", "Quick Answers",
+    "Deals, Closing Out And The Daily Email", "Good Habits", "Quick Answers",
 ]
+LAST = {"lead": "For Team Leaders: Approving Lessons", "manager": "For Managers"}  # section 14
+WHO = {
+    "member": "This is the guide for TCs. Read sections 1–11 and keep the Quick Reference Card handy. Team Leaders "
+              "and Managers have their own guides with one more section (your photo → Help).",
+    "lead": "Read sections 1–11 and keep the Quick Reference Card handy. Section 14 is for you: approving what the "
+            "agent learns.",
+    "manager": "TCs read sections 1–11 and keep the Quick Reference Card handy. Section 14 is for Managers: the team, "
+               "the settings, permissions and connections. Each person finds their own guide under your photo → Help.",
+}
 DESK = (0.14, 0.0, 0.86, 1.0)  # the page's content column on a desktop screenshot
 
 
-def story() -> list:
+def story(reader: str) -> list:
+    """reader: member | lead | manager (GUIDES)."""
     s: list = [NextPageTemplate("inner"), PageBreak()]
 
     # ---- contents
     s += [P("Contents", "h1"), Spacer(1, 6)]
     toc = [[Para(f'<font name="Baloo" color="#BD2239">{i}</font>', S["toc"]), Para(t, S["toc"])]
-           for i, t in enumerate(SECTIONS, 1)]
+           for i, t in enumerate(SECTIONS + ([LAST[reader]] if reader in LAST else []), 1)]
     toc.append([Para('<font name="Baloo" color="#BD2239">★</font>', S["toc"]),
                 Para("Quick Reference Card (last page)", S["toc"])])
     t = Table(toc, colWidths=[0.4 * inch, WIDTH - 0.4 * inch])
     t.setStyle(TableStyle([("LINEBELOW", (0, 0), (-1, -1), 0.4, LINE), ("TOPPADDING", (0, 0), (-1, -1), 3),
                            ("BOTTOMPADDING", (0, 0), (-1, -1), 3), ("LEFTPADDING", (0, 0), (-1, -1), 2)]))
     s += [t, Spacer(1, 14),
-          box("TCs: read sections 1–11 and keep the Quick Reference Card handy. Owner and admins: also read "
-              "section 12.", "tip", "Who reads what"),
+          box(WHO[reader], "tip", "Who reads what"),
           box(f"The Title Agent is now the <b>{APP}</b>, at <b>title.totalchb.com</b>. It looks and works like "
               "the Universal Team Hub, you sign in with your company Google account, and its Closing Blockers show "
               "up in the hub as tasks (section 10). Old links from earlier emails still open the right deal. "
@@ -320,7 +340,8 @@ def story() -> list:
               "the Team Hub's date calendar; Team (Managers, from your photo) with roles and photos; "
               "Settings → Permissions for Team Leaders and Members; and picking who gets the email. "
               "New in 2.2: every export is also saved in the team's Google Drive folder, in a folder for its type, "
-              "with the date and time in its name; and due dates take a time, as in the Team Hub.", "good",
+              "with the date and time in its name; and due dates take a time, as in the Team Hub. "
+              "New in 2.3: <b>Help</b> under your photo, with the guide for your role.", "good",
               "What's new in version 2")]
     s.append(PageBreak())
 
@@ -388,13 +409,22 @@ def story() -> list:
         ["DEALS", "Home. Every reviewed deal, with search and Open / Closed / All. The numbers at the top count open "
                   "deals, open Closing Blockers and deals closing in the next 7 days."],
         ["ANALYZE", "Upload a new or updated commitment (section 4)."],
-        ["TRAINING", "Optional: measure the agent on a commitment your team already worked (section 12)."],
+        ["TRAINING", "Optional: measure the agent on a commitment your team already worked (section 7)."],
         ["KNOWLEDGE", "What the agent knows: the Feedback Inbox, the team's lessons and the professional checklist."],
         ["Sun / moon", "Light or dark look. Your choice is remembered on that browser."],
-        ["Your photo", "Your account and role, <b>Settings</b>, <b>Team</b> (Managers only) and <b>Sign Out</b>. "
+        ["Your photo", "Your account and role, <b>Settings</b>, <b>Team</b> (Managers only), <b>Help</b> and "
+                       "<b>Sign Out</b>. "
                        "Your initials show until a manager adds your photo."],
     ], [0.2, 0.8])]
-    s += [shot("13-menu", "Click your initials for Settings and Sign Out.", 0.45, crop=(0.58, 0.0, 0.86, 0.25))]
+    s += [shot("13-menu", "Click your photo (or initials) for Settings, Help and Sign Out.", 0.45,
+               crop=(0.6, 0.0, 0.86, 0.32))]
+    s += [P("Help", "h2"),
+          P("Your photo → <b>Help</b> opens this guide, the one for your role: the <b>TC Guide</b>, the <b>Team "
+            "Leader Guide</b> (with approving lessons) or the <b>Manager Guide</b>. It also shows what your role "
+            "can do and a short list of the everyday steps. Managers can open all three, to send the right one to "
+            "someone new."),
+          shot("27-help", "Help: your guide, what your role can do, and the everyday steps.", 1.0,
+               crop=(0.14, 0.12, 0.86, 0.98), max_h=4.4)]
     s += [P("On a phone", "h2"),
           P("Same link, same sign-in. The tabs move to a second row, every item is a card you tap to open, and menus "
             "slide up from the bottom. Everything works on a phone, uploads and exports included; a computer is "
@@ -543,6 +573,16 @@ def story() -> list:
             "or <b>Wrong Information</b>. It goes to the Feedback Inbox. Then set the item to <b>Waived</b> with a "
             "note.")]
 
+    s += [P("Training: measuring the agent (optional)", "h2"),
+          P("To measure the agent, open <b>TRAINING</b>, upload a commitment your team already worked, pick the deal "
+            "type, paste the closer's list as is and click <b>Compare With Agent</b>. You'll see what both found, "
+            "what the agent missed (each becomes a suggested lesson in the Feedback Inbox) and what it added. Leave "
+            "the list empty for a clean title: the agent should then find no Closing Blockers. Each comparison is a "
+            "full review: 1–3 minutes and roughly $1–2 in AI usage."),
+          shot("15-training-results", "Training: the closer's list compared with the agent's.", 1.0,
+               crop=(0.14, 0.57, 0.86, 0.93))]
+
+
     # ---- 8
     s += section(8, "Updated Commitments And Re-Runs")
     s += [P("When the title company sends a revised commitment", "h2")]
@@ -646,10 +686,67 @@ def story() -> list:
             "before then. With no open deals it still arrives and says so.")]
 
     # ---- 12
-    s += section(12, "For The Owner And Admins",
-                 "Managers set up the team and the settings, and approve what the agent learns. Settings → "
-                 "Permissions lets Team Leaders (and Members, if you choose) approve lessons and add missing items "
-                 "too.")
+    s += section(12, "Good Habits")
+    s += bullets([
+        "<b>Run every commitment through the agent</b> the day it arrives, and every revised commitment too.",
+        "<b>Always add the closing date.</b> Without it, there are no due dates and no countdown.",
+        "<b>Check Coverage.</b> Anything short of 100% or a red box means: read those items yourself.",
+        "<b>Check every ✗</b> next to a source against the commitment.",
+        "<b>Keep statuses current.</b> The Team Hub, the daily email and the whole team rely on them.",
+        "<b>Report every miss.</b> One report can save every future deal.",
+        "<b>Keep deal data inside the company.</b> Don't forward exports outside the people on the deal.",
+        "<b>A person signs off</b> on the list before closing. The agent helps; it doesn't decide.",
+    ])
+
+    # ---- 13
+    s += section(13, "Quick Answers")
+    s += [table(["Question", "Answer"], [
+        ["It says my account doesn't have access.", "Sign in with your @totalchb.com Google account, not a personal "
+                                                    "one."],
+        ["Does it work on my phone?", "Yes, in the phone's browser with the same link and sign-in."],
+        ["\"The AI service is busy\" or another error.", "Wait a minute and click the button again. Nothing is lost."],
+        ["\"Couldn't reach the Title Commitment Agent.\"", "Your internet connection dropped. Try again once it's "
+                                                           "back."],
+        ["The numbering check is red.", "Read the listed item numbers in the commitment yourself and add anything "
+                                        "missing with Report Missing Item."],
+        ["An item is wrong.", "Open it → Feedback → Wrong Information, then set it to Waived with a note."],
+        ["I picked the wrong deal type or date.", "Deal → Updated Commitment, upload the same PDF and fix the details "
+                                                  "on the confirm screen."],
+        ["Can I upload a scanned PDF?", "Yes. Quotes from scanned pages have no ✓, because there's no text to check "
+                                        "them against."],
+        ["A blocker isn't in the Team Hub yet.", "Look at the Team Hub line at the bottom of the deal. If it says Not "
+                                                 "reached yet, it catches up the next weekday morning; if it still "
+                                                 "does after that, tell an admin."],
+        ["I ticked a subtask in the hub. Will it clear here?", "Yes, the blocker turns Cleared here, usually within "
+                                                               "moments."],
+        ["Where are the original PDFs?", "Bottom of the deal → Documents And Review History."],
+        ["The daily email didn't arrive.", "Check spam once and mark it Not Spam. Then an admin checks Settings → "
+                                           "Connections → Daily Email, which shows what happened."],
+        ["Google Sheets / Docs shows an error.", "The message says what's wrong. Use Excel or Word for now and tell an "
+                                                 "admin (Settings → Test Google Folder)."],
+        ["It says Downloaded, but not saved in the Drive folder.", "You have the file; only the Drive copy is "
+                                                                   "missing. Tell an admin (Settings → Test Google "
+                                                                   "Folder)."],
+        ["I can't see Report Missing Item, or can't approve lessons.", "Your role doesn't allow it yet. A manager "
+                                                                         "can turn it on: Settings → Permissions."],
+        ["How do I change someone's role or photo?", "Managers: your photo, top right → Team. Pick the role, click "
+                                                     "the picture for a new photo, then Save Changes."],
+        ["Who sees my changes?", "Everyone on the team, immediately. Your email is recorded on each change."],
+        ["Where do I find this guide again?", "Your photo, top right → Help."],
+    ], [0.38, 0.62])]
+
+    # ---- 14: for the people who approve lessons (Team Leaders) and the Managers
+    if reader == "member":
+        return s
+    if reader == "manager":
+        s += section(14, "For Managers",
+                     "Managers set up the team and the settings, and approve what the agent learns. Settings → "
+                     "Permissions lets Team Leaders (and Members, if you choose) approve lessons and add missing "
+                     "items too.")
+    else:
+        s += section(14, "For Team Leaders: Approving Lessons",
+                     "Team Leaders approve what the agent learns, as the Managers do, while Settings → Permissions "
+                     "allows it. A manager sets up the team and the settings.")
     s += [P("Approving lessons (Knowledge tab)", "h2"),
           shot("16-knowledge", "Knowledge: how the agent scores, the active lessons, the checklist, and the Feedback "
                                "Inbox.", 1.0, crop=(0.14, 0.12, 0.86, 1.0), max_h=4.4)]
@@ -668,11 +765,13 @@ def story() -> list:
             "commitments the team provided. Further down: the training examples with their latest score, and "
             "<b>The Professional Checklist</b> (34 checks the agent runs on every deal)."),
           shot("17-lessons", "Lessons: each one can be turned off and on.", 1.0, crop=(0.14, 0.56, 0.86, 1.0))]
+    if reader != "manager":
+        return s
     s += [CondPageBreak(4.5 * inch), P("Team (Managers only)", "h2"),
           P("The same team as the Universal Team Hub's Managers and TC department. Managers are the admins; everyone "
             "in TC is in the TC list when you confirm a deal. Open it from your photo, top right → <b>Team</b>."),
-          shot("25-menu", "Your photo opens Settings, Team (Managers only) and Sign Out.", 0.5,
-               crop=(0.62, 0.0, 0.86, 0.24)),
+          shot("25-menu", "Your photo opens Settings, Team (Managers only), Help and Sign Out.", 0.5,
+               crop=(0.6, 0.0, 0.86, 0.37)),
           shot("23-team", "Team: photos, roles and departments (made-up names).", 1.0,
                crop=(0.14, 0.12, 0.86, 0.92), max_h=4.6)]
     s += [steps([
@@ -718,66 +817,12 @@ def story() -> list:
     ], [0.22, 0.78])]
     s += [box("Access is the company Google account: when someone leaves and their @totalchb.com account is "
               "closed, they can no longer sign in. Remove them on Team too.", "warn")]
-    s += [P("Training (optional)", "h2"),
-          P("To measure the agent, open <b>TRAINING</b>, upload a commitment your team already worked, pick the deal "
-            "type, paste the closer's list as is and click <b>Compare With Agent</b>. You'll see what both found, "
-            "what the agent missed (each becomes a suggested lesson in the Feedback Inbox) and what it added. Leave "
-            "the list empty for a clean title: the agent should then find no Closing Blockers. Each comparison is a "
-            "full review: 1–3 minutes and roughly $1–2 in AI usage."),
-          shot("15-training-results", "Training: the closer's list compared with the agent's.", 1.0,
-               crop=(0.14, 0.57, 0.86, 0.93))]
+    return s
 
-    # ---- 13
-    s += section(13, "Good Habits")
-    s += bullets([
-        "<b>Run every commitment through the agent</b> the day it arrives, and every revised commitment too.",
-        "<b>Always add the closing date.</b> Without it, there are no due dates and no countdown.",
-        "<b>Check Coverage.</b> Anything short of 100% or a red box means: read those items yourself.",
-        "<b>Check every ✗</b> next to a source against the commitment.",
-        "<b>Keep statuses current.</b> The Team Hub, the daily email and the whole team rely on them.",
-        "<b>Report every miss.</b> One report can save every future deal.",
-        "<b>Keep deal data inside the company.</b> Don't forward exports outside the people on the deal.",
-        "<b>A person signs off</b> on the list before closing. The agent helps; it doesn't decide.",
-    ])
 
-    # ---- 14
-    s += section(14, "Quick Answers")
-    s += [table(["Question", "Answer"], [
-        ["It says my account doesn't have access.", "Sign in with your @totalchb.com Google account, not a personal "
-                                                    "one."],
-        ["Does it work on my phone?", "Yes, in the phone's browser with the same link and sign-in."],
-        ["\"The AI service is busy\" or another error.", "Wait a minute and click the button again. Nothing is lost."],
-        ["\"Couldn't reach the Title Commitment Agent.\"", "Your internet connection dropped. Try again once it's "
-                                                           "back."],
-        ["The numbering check is red.", "Read the listed item numbers in the commitment yourself and add anything "
-                                        "missing with Report Missing Item."],
-        ["An item is wrong.", "Open it → Feedback → Wrong Information, then set it to Waived with a note."],
-        ["I picked the wrong deal type or date.", "Deal → Updated Commitment, upload the same PDF and fix the details "
-                                                  "on the confirm screen."],
-        ["Can I upload a scanned PDF?", "Yes. Quotes from scanned pages have no ✓, because there's no text to check "
-                                        "them against."],
-        ["A blocker isn't in the Team Hub yet.", "Look at the Team Hub line at the bottom of the deal. If it says Not "
-                                                 "reached yet, it catches up the next weekday morning; if it still "
-                                                 "does after that, tell an admin."],
-        ["I ticked a subtask in the hub. Will it clear here?", "Yes, the blocker turns Cleared here, usually within "
-                                                               "moments."],
-        ["Where are the original PDFs?", "Bottom of the deal → Documents And Review History."],
-        ["The daily email didn't arrive.", "Check spam once and mark it Not Spam. Then an admin checks Settings → "
-                                           "Connections → Daily Email, which shows what happened."],
-        ["Google Sheets / Docs shows an error.", "The message says what's wrong. Use Excel or Word for now and tell an "
-                                                 "admin (Settings → Test Google Folder)."],
-        ["It says Downloaded, but not saved in the Drive folder.", "You have the file; only the Drive copy is "
-                                                                   "missing. Tell an admin (Settings → Test Google "
-                                                                   "Folder)."],
-        ["I can't see Report Missing Item, or can't approve lessons.", "Your role doesn't allow it yet. A manager "
-                                                                         "can turn it on: Settings → Permissions."],
-        ["How do I change someone's role or photo?", "Managers: your photo, top right → Team. Pick the role, click "
-                                                     "the picture for a new photo, then Save Changes."],
-        ["Who sees my changes?", "Everyone on the team, immediately. Your email is recorded on each change."],
-    ], [0.38, 0.62])]
-
-    # ---- reference card
-    s += [PageBreak(), P("Quick Reference Card", "h1"), P("Print this page and keep it at your desk.", "lead")]
+def reference_card() -> list:
+    """The last page, for everyone."""
+    s = [PageBreak(), P("Quick Reference Card", "h1"), P("Print this page and keep it at your desk.", "lead")]
     ref = [
         ("New commitment", "ANALYZE → drop the PDF (+ contract) → Read Documents → confirm deal type and closing "
                            "date → Run Full Review."),
@@ -828,16 +873,22 @@ def story() -> list:
     return s
 
 
-def build() -> Path:
-    doc = BaseDocTemplate(str(OUT), pagesize=letter, title=f"{APP} User Guide",
-                          author="Total Cash Home Buyers", subject=f"How to use the {APP}")
-    cover_frame = Frame(MARGIN, MARGIN, WIDTH, PAGE_H - 2 * MARGIN, id="cover")
-    body = Frame(MARGIN, 0.8 * inch, WIDTH, PAGE_H - 1.75 * inch, id="body")
-    doc.addPageTemplates([PageTemplate("cover", [cover_frame], onPage=cover),
-                          PageTemplate("inner", [body], onPage=inner)])
-    doc.build([Spacer(1, 1), *story()])
-    return OUT
+def build() -> list[Path]:
+    OUT.mkdir(parents=True, exist_ok=True)
+    out = []
+    for reader, guide in GUIDES.items():
+        path = OUT / guide[2]
+        doc = BaseDocTemplate(str(path), pagesize=letter, title=f"{APP} {guide[0]}",
+                              author="Total Cash Home Buyers", subject=f"How to use the {APP}")
+        doc.guide = guide
+        cover_frame = Frame(MARGIN, MARGIN, WIDTH, PAGE_H - 2 * MARGIN, id="cover")
+        body = Frame(MARGIN, 0.8 * inch, WIDTH, PAGE_H - 1.75 * inch, id="body")
+        doc.addPageTemplates([PageTemplate("cover", [cover_frame], onPage=cover),
+                              PageTemplate("inner", [body], onPage=inner)])
+        doc.build([Spacer(1, 1), *story(reader), *reference_card()])
+        out.append(path)
+    return out
 
 
 if __name__ == "__main__":
-    print(build())
+    print(*build(), sep="\n")

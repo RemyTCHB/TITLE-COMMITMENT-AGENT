@@ -9,6 +9,7 @@
 # Deal data: commitments, contracts and exports hold personal information. Never commit them.
 .data/
 *.pdf
+!web/public/guides/*.pdf
 *.csv
 *.xlsx
 *.xls

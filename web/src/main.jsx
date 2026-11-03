@@ -14,6 +14,7 @@ import { Analyze } from './pages/Analyze.jsx';
 import { Knowledge } from './pages/Knowledge.jsx';
 import { Settings } from './pages/Settings.jsx';
 import { Team } from './pages/Team.jsx';
+import { Help } from './pages/Help.jsx';
 import { useSettings } from './data.js';
 import { Training } from './pages/Training.jsx';
 
@@ -55,6 +56,7 @@ function Header({ user, me, page }) {
               <div class="label">{user.email}{me?.admin ? ' · manager' : me?.role === 'lead' ? ' · team leader' : ''}</div>
               <button onClick={() => go('settings')}><Icon name="settings" /> Settings</button>
               {me?.admin && <button onClick={() => go('team')}><Icon name="users" /> Team</button>}
+              <button onClick={() => go('help')}><Icon name="help" /> Help</button>
               <hr />
               <button onClick={signOutNow}><Icon name="out" /> Sign Out</button>
             </Menu>
@@ -112,6 +114,7 @@ function App() {
                 : page === 'training' ? <Training />
                   : page === 'knowledge' ? <Knowledge me={me} />
                     : page === 'team' ? <Team me={me} />
+                      : page === 'help' ? <Help me={me} />
                       : page === 'settings' ? <Settings me={me} />
                         : <Deals />}
       </main>

@@ -299,3 +299,16 @@ def test_due_time_in_exports_and_the_email():
     assert due_text(i) == "2026-11-05 5:30 PM" and due_text(i.model_copy(update={"due_time": None})) == "2026-11-05"
     assert "Due Nov 5, 5:30 PM" in _due(i, date(2026, 11, 1))
     assert "Due today 5:30 PM" in _due(i, date(2026, 11, 5))
+
+
+def test_help_links_the_guides_the_builder_makes():
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    help_page = (root / "web" / "src" / "pages" / "Help.jsx").read_text(encoding="utf-8")
+    linked = set(re.findall(r"file: '([^']+\.pdf)'", help_page))
+    built = set(re.findall(r'"(Title_Commitment_Agent_\w+\.pdf)"', (root / "docs" / "guide" / "build_guide.py")
+                           .read_text(encoding="utf-8")))
+    assert len(linked) == 3 and linked == built
+    assert all((root / "web" / "public" / "guides" / f).is_file() for f in linked)
