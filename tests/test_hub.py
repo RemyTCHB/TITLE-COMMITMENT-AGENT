@@ -124,3 +124,66 @@ def test_engine_takes_signed_hub_updates_and_sends_changes(monkeypatch):
     client.patch(f"/v1/deals/{deal_id}/items", json={"key": "1", "status": "Open"},
                  headers={"Authorization": "Bearer tc"})
     assert len(fake.sent) == 1 and fake.sent[0]["blockers"][0]["status"] == "Open"
+
+
+class Answer:
+    def __init__(self, status, body=None):
+        self.status_code, self.body = status, body or {}
+
+    def json(self):
+        return self.body
+
+
+def test_help_passwords_come_from_the_hub_signed():
+    asked = []
+
+    def post(url, data, headers, timeout):
+        assert hub.verify("s3cret", data, headers["X-Hub-Timestamp"], headers["X-Hub-Signature"])
+        asked.append((url, json.loads(data)))
+        return Answer(200, {"rows": [{"dept": "TC", "lead": "made-up-1", "sub": "made-up-2", "extra": "x"}],
+                            "own": [{"name": "Sample Person", "pw": "made-up-3"}]})
+
+    out = hub.passwords(SECRETS, "Sam.Rivera@totalchb.com", post=post)
+    assert asked == [("https://hub.example/api/title-agent/passwords", {"email": "sam.rivera@totalchb.com"})]
+    assert out == {"rows": [{"dept": "TC", "lead": "made-up-1", "sub": "made-up-2"}],
+                   "own": [{"name": "Sample Person", "pw": "made-up-3"}]}
+    with pytest.raises(hub.HubPasswordsError, match="doesn't share"):  # the hub hasn't added the endpoint yet
+        hub.passwords(SECRETS, "a@totalchb.com", post=lambda *a, **k: Answer(404))
+    with pytest.raises(hub.HubPasswordsError, match="isn't connected"):
+        hub.passwords(Secrets(None, None, None), "a@totalchb.com")
+
+
+def test_engine_help_passwords_only_for_team_leaders_and_managers(monkeypatch):
+    from tests.conftest import firestore_store
+    from tests.test_engine import h, verify
+
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from engine.main import Engine, create_app
+    from titleagent import demo
+
+    store = firestore_store()
+    store.set_setting("team", [{"name": "Pat Tc", "email": "pat.tc@totalchb.com", "role": "manager", "dept": ""},
+                               {"name": "Owner Lead", "email": "owner@totalchb.com", "role": "lead", "dept": "TC"}],
+                      by="test")
+    store.set_setting("admins", ["pat.tc@totalchb.com"], by="test")
+    asked = []
+    monkeypatch.setattr(hub, "passwords", lambda _s, email: asked.append(email) or {"rows": [], "own": []})
+    client = TestClient(create_app(Engine(secrets=SECRETS, store=store, llm=demo.scripted_llm, verify=verify)))
+    for who in ("tc", "owner"):  # the manager and the Team Leader
+        r = client.get("/v1/help/passwords", headers=h(who))
+        assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
+    assert asked == ["pat.tc@totalchb.com", "owner@totalchb.com"]
+    store.set_setting("team", [{"name": "Pat Tc", "email": "pat.tc@totalchb.com", "role": "manager", "dept": ""},
+                               {"name": "Owner", "email": "owner@totalchb.com", "role": "member", "dept": "TC"}],
+                      by="test")
+    assert client.get("/v1/help/passwords", headers=h("owner")).json() == {"rows": [], "own": []}  # a Member
+    assert asked == ["pat.tc@totalchb.com", "owner@totalchb.com"]  # the hub wasn't asked
+
+    def down(*_a):
+        raise hub.HubPasswordsError("Couldn't reach the Team Hub. Try again.")
+
+    monkeypatch.setattr(hub, "passwords", down)
+    r = client.get("/v1/help/passwords", headers=h("tc"))
+    assert r.status_code == 503 and r.json()["detail"] == "Couldn't reach the Team Hub. Try again."

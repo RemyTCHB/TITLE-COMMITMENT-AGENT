@@ -128,5 +128,30 @@ def _mark(store, deal_id: int, fields: dict) -> None:
             pass
 
 
+class HubPasswordsError(RuntimeError):
+    pass
+
+
+def passwords(secrets, email: str, post=None) -> dict:
+    """The hub's delete passwords this person may see, for Help (POST <hub>/passwords, signed like the sync): the hub
+    decides from its own team: Managers every department and the people with their own, Team Leaders their
+    departments, Members none. {"rows": [{dept, lead, sub}], "own": [{name, pw}]}. Never logged or stored here."""
+    if not getattr(secrets, "has_hub", False):
+        raise HubPasswordsError("The Team Hub isn't connected yet.")
+    body = json.dumps({"email": email.lower()}).encode()
+    try:
+        r = (post or requests.post)(f"{secrets.hub_url.rstrip('/')}/passwords", data=body,
+                                    headers=signed_headers(secrets.hub_secret, body), timeout=20)
+    except requests.RequestException as exc:
+        raise HubPasswordsError("Couldn't reach the Team Hub. Try again.") from exc
+    if r.status_code == 404:
+        raise HubPasswordsError("The Team Hub doesn't share its passwords with this app yet.")
+    if r.status_code != 200:
+        raise HubPasswordsError(f"The Team Hub couldn't load the passwords ({r.status_code}). Try again.")
+    out = r.json()
+    return {"rows": [{k: str(x.get(k) or "") for k in ("dept", "lead", "sub")} for x in out.get("rows") or []],
+            "own": [{k: str(x.get(k) or "") for k in ("name", "pw")} for x in out.get("own") or []]}
+
+
 # Team photos may be links to the hub's photo store (the team was first copied from the hub, 2026-10-30)
 PHOTO_HOSTS = ("https://firebasestorage.googleapis.com/",)

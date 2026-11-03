@@ -67,9 +67,12 @@ sync when a rule changes. (The first Streamlit version and its Neon database wer
   it, the person who deployed it pastes it over the old one and deploys a new version (Test Google Folder says so).
 - Help (owner 2026-11-03; everyone, from the account menu, `pages/Help.jsx`): the user guide for the person's role
   (Managers: the Manager Guide and the other two to share; anyone who may approve lessons: the Team Leader Guide;
-  otherwise the TC Guide), what their role can do (`/v1/me` `can`) and the everyday steps. The guides are built by
-  `docs/guide/build_guide.py` into `web/public/guides/` (the same file names as Help's GUIDES; a test checks them);
-  rebuild them after a change to the guide.
+  otherwise the TC Guide), read inside the app as in the hub's Help (contents + the guide, full screen on a phone)
+  or as a PDF, what their role can do (`/v1/me` `can`) and the everyday steps. `docs/guide/build_guide.py` builds
+  the PDFs, `guides.json` (the same guides as HTML) and `img/` into `web/public/guides/` (a test checks Help's
+  links); rebuild after a change to the guide. Team Leaders' and Managers' guides show the hub's delete passwords
+  (owner 2026-11-03): `GET /v1/help/passwords` asks the hub (`hub.passwords()`, `POST <hub>/passwords`, signed with
+  `HUB_SYNC_SECRET`), which decides per person from its team; never stored, logged, cached or in the PDF.
 - `scripts/gcp_setup.sh` (one-time Google Cloud setup), `scripts/evaluate.py` (accuracy on worked commitments kept
   outside the repo).
 - Model: `claude-opus-5-5`, effort `high` (accuracy first). The system prompt must stay identical across a run's

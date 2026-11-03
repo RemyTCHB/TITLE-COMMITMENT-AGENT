@@ -13,6 +13,9 @@ Fonts: Baloo 2 and Nunito Sans (SIL Open Font License), the same as the app.
 
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from datetime import date
 from pathlib import Path
 
@@ -96,6 +99,46 @@ S = {
 }
 
 
+# ---------------------------------------------------------------- the in-app guide (Help)
+# Each building block below also writes the same content as HTML, so the page's Help shows the guide inside the app
+# (web/src/pages/Help.jsx reads OUT/guides.json), as the Universal Team Hub's Help does. Pictures go to OUT/img.
+WEB: list[str] | None = None  # the HTML of the guide being built
+NAV: list[dict] = []  # its sections, for Help's contents list
+WEB_IMG = OUT / "img"
+WEB_USED: set[str] = set()
+
+
+def emit(html: str) -> None:
+    if WEB is not None:
+        WEB.append(html)
+
+
+def web(text: str) -> str:
+    """The guide's mini-markup (ReportLab) as HTML: <font name=… color=…> becomes a span (bold for the bold faces)."""
+    def font(m: re.Match) -> str:
+        name, color = re.search(r'name="([^"]*)"', m.group(1)), re.search(r'color="([^"]*)"', m.group(1))
+        css = ([f"color:{color.group(1)}"] if color and color.group(1).lower() not in ("white", "#ffffff") else []) + \
+              (["font-weight:700"] if name and re.search(r"Bold|Black|Baloo", name.group(1)) else [])
+        return f'<span style="{";".join(css)}">' if css else "<span>"
+    return re.sub(r"<font\b([^>]*)>", font, text).replace("</font>", "</span>")
+
+
+def web_image(name: str, crop, box: tuple[int, int]) -> tuple[str, int, int]:
+    """A light copy of a (cropped) screenshot for the page: (its /guides/img/… path, width, height)."""
+    im = PILImage.open(SHOTS / f"{name}.jpg").convert("RGB")
+    if crop:
+        w, h = im.size
+        im = im.crop((int(crop[0] * w), int(crop[1] * h), int(crop[2] * w), int(crop[3] * h)))
+    im.thumbnail(box, PILImage.LANCZOS)
+    tag = hashlib.sha1(repr(crop).encode()).hexdigest()[:6]
+    file = f"{name}-{tag}.jpg"
+    if file not in WEB_USED:
+        WEB_IMG.mkdir(parents=True, exist_ok=True)
+        im.save(WEB_IMG / file, quality=78, optimize=True, progressive=True)
+        WEB_USED.add(file)
+    return f"/guides/img/{file}", im.width, im.height
+
+
 # ---------------------------------------------------------------- building blocks
 SYMBOLS = "✓✗★→"
 
@@ -107,6 +150,12 @@ def Para(text: str, style: ParagraphStyle, **kw) -> Paragraph:
 
 
 def P(text: str, style: str = "p") -> Paragraph:
+    if style == "h1":  # the Quick Reference Card's heading: a section of its own in Help's contents
+        NAV.append({"id": "sec-ref", "num": "★", "title": text})
+        emit(f'<h2 id="sec-ref" data-sec><span class="g-num">★</span>{web(text)}</h2>')
+    else:
+        tag = {"h2": "h3", "lead": 'p class="g-lead"', "small": 'p class="g-small"'}.get(style, "p")
+        emit(f"<{tag}>{web(text)}</{tag.split()[0]}>")
     return Para(text, S[style])
 
 
@@ -122,6 +171,8 @@ def section(n: int, title: str, lead: str = "", need: float = 3.2) -> list:
     head.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LEFTPADDING", (0, 0), (-1, -1), 0),
                               ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]))
     head.keepWithNext = True
+    NAV.append({"id": f"sec-{n}", "num": f"{n:02d}", "title": title})
+    emit(f'<h2 id="sec-{n}" data-sec><span class="g-num">{n:02d}</span>{web(title)}</h2>')
     out = [CondPageBreak(need * inch), head]
     if lead:
         intro = P(lead, "lead")
@@ -131,6 +182,7 @@ def section(n: int, title: str, lead: str = "", need: float = 3.2) -> list:
 
 
 def steps(items: list[str]) -> Table:
+    emit('<ol class="g-steps">' + "".join(f"<li>{web(t)}</li>" for t in items) + "</ol>")
     rows = []
     for i, t in enumerate(items, 1):
         num = Table([[Para(f'<font name="Nunito-Black" color="#4D458A">{i}</font>',
@@ -148,6 +200,7 @@ def steps(items: list[str]) -> Table:
 
 
 def bullets(items: list[str]) -> list:
+    emit('<ul class="g-list">' + "".join(f"<li>{web(t)}</li>" for t in items) + "</ul>")
     return [Para(t, ParagraphStyle("bl", parent=S["p"], leftIndent=12, bulletIndent=2, spaceAfter=3),
                       bulletText="•") for t in items]
 
@@ -155,6 +208,7 @@ def bullets(items: list[str]) -> list:
 def box(text: str, kind: str = "tip", title: str = "") -> Table:
     bg, edge, label = {"tip": (ACCENT_SOFT, INDIGO, "Tip"), "warn": (WARN_BG, WARN, "Important"),
                        "bad": (BAD_BG, RED, "Watch out"), "good": (GOOD_BG, GREEN, "Good to know")}[kind]
+    emit(f'<div class="g-box g-{kind}"><b>{web(title or label)}.</b> {web(text)}</div>')
     content = Para(f'<font name="Nunito-Bold" color="{edge.hexval()}">{title or label}.</font> {text}', S["p"])
     t = Table([[content]], colWidths=[WIDTH])
     t.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), bg), ("ROUNDEDCORNERS", [8, 8, 8, 8]),
@@ -165,6 +219,10 @@ def box(text: str, kind: str = "tip", title: str = "") -> Table:
 
 
 def table(head: list[str], rows: list[list[str]], widths: list[float], first_bold: bool = True) -> Table:
+    emit('<div class="g-table"><table><thead><tr>' + "".join(f"<th>{web(h)}</th>" for h in head)
+         + "</tr></thead><tbody>"
+         + "".join("<tr>" + "".join(f'<td{" class=b" if i == 0 and first_bold else ""}>{web(c)}</td>'
+                                    for i, c in enumerate(r)) + "</tr>" for r in rows) + "</tbody></table></div>")
     data = [[Para(h, S["th"]) for h in head]]
     for r in rows:
         data.append([Para(c, S["cellb"] if (i == 0 and first_bold) else S["cell"]) for i, c in enumerate(r)])
@@ -200,7 +258,10 @@ def shot(name: str, caption: str, width: float = 1.0, crop: tuple[float, float, 
     frame.setStyle(TableStyle([("BOX", (0, 0), (-1, -1), 0.6, LINE), ("ROUNDEDCORNERS", [6, 6, 6, 6]),
                                ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 3),
                                ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3)]))
-    return KeepTogether([Spacer(1, 4), frame, P(caption, "cap")])
+    url, iw, ih = web_image(name, crop, (1100, 1400))
+    emit(f'<figure class="g-shot" style="max-width:{round(width * 100)}%"><img src="{url}" width="{iw}" height="{ih}" '
+         f'alt="" loading="lazy"><figcaption>{web(caption)}</figcaption></figure>')
+    return KeepTogether([Spacer(1, 4), frame, Para(caption, S["cap"])])
 
 
 def pair(left: str, right: str, caption: str, height: float = 4.3) -> KeepTogether:
@@ -211,7 +272,11 @@ def pair(left: str, right: str, caption: str, height: float = 4.3) -> KeepTogeth
         cells.append(Image(str(SHOTS / f"{name}.jpg"), width=height * inch * w / h, height=height * inch))
     t = Table([cells], colWidths=[WIDTH / 2.6] * 2)
     t.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "TOP")]))
-    return KeepTogether([Spacer(1, 4), t, P(caption, "cap")])
+    imgs = [web_image(n, None, (520, 1000)) for n in (left, right)]
+    emit('<figure class="g-pair"><div>'
+         + "".join(f'<img src="{u}" width="{w}" height="{h}" alt="" loading="lazy">' for u, w, h in imgs)
+         + f"</div><figcaption>{web(caption)}</figcaption></figure>")
+    return KeepTogether([Spacer(1, 4), t, Para(caption, S["cap"])])
 
 
 def flow() -> KeepTogether:
@@ -236,6 +301,12 @@ def flow() -> KeepTogether:
                 node("Universal Team Hub", "hub.totalchb.com<br/>where the team's tasks live", ACCENT_SOFT)]],
               colWidths=[2.15 * inch, 2.7 * inch, 2.15 * inch])
     t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (0, 0), (-1, -1), "CENTER")]))
+    emit(f'<div class="g-flow"><div class="g-node"><b>{APP}</b><span>title.totalchb.com, where the list is worked'
+         '</span></div><div class="g-arrows"><p><b style="color:#BD2239">Closing Blockers →</b> one task per deal, one '
+         'subtask per blocker, with its action, source and due date</p><p><b style="color:#109648">← ticked / '
+         'unticked</b> a blocker ticked done there is Cleared here; unticked is Open again</p></div>'
+         '<div class="g-node"><b>Universal Team Hub</b><span>hub.totalchb.com, where the team\'s tasks live</span>'
+         '</div></div>')
     return KeepTogether([Spacer(1, 4), t, Spacer(1, 10)])
 
 
@@ -273,7 +344,7 @@ def cover(c, doc) -> None:
     c.drawString(MARGIN, PAGE_H - 6.85 * inch, doc.guide[1])
     c.setFont("Nunito", 10)
     c.setFillColor(MUTED)
-    c.drawString(MARGIN, PAGE_H - 7.12 * inch, f"Version 2.3 · {date.today():%B %Y} · title.totalchb.com")
+    c.drawString(MARGIN, PAGE_H - 7.12 * inch, f"Version 2.4 · {date.today():%B %Y} · title.totalchb.com")
     c.setFillColor(colors.white)
     c.setFont("Nunito-Bold", 9.5)
     c.drawString(MARGIN, 0.62 * inch, "Total Cash Home Buyers · Internal use only")
@@ -306,12 +377,12 @@ SECTIONS = [
     "Updated Commitments And Re-Runs", "Exporting The List", "The Universal Team Hub Connection",
     "Deals, Closing Out And The Daily Email", "Good Habits", "Quick Answers",
 ]
-LAST = {"lead": "For Team Leaders: Approving Lessons", "manager": "For Managers"}  # section 14
+LAST = {"lead": "For Team Leaders", "manager": "For Managers"}  # section 14
 WHO = {
     "member": "This is the guide for TCs. Read sections 1–11 and keep the Quick Reference Card handy. Team Leaders "
               "and Managers have their own guides with one more section (your photo → Help).",
     "lead": "Read sections 1–11 and keep the Quick Reference Card handy. Section 14 is for you: approving what the "
-            "agent learns.",
+            "agent learns, and the Team Hub's delete passwords (in the app).",
     "manager": "TCs read sections 1–11 and keep the Quick Reference Card handy. Section 14 is for Managers: the team, "
                "the settings, permissions and connections. Each person finds their own guide under your photo → Help.",
 }
@@ -323,7 +394,7 @@ def story(reader: str) -> list:
     s: list = [NextPageTemplate("inner"), PageBreak()]
 
     # ---- contents
-    s += [P("Contents", "h1"), Spacer(1, 6)]
+    s += [Para("Contents", S["h1"]), Spacer(1, 6)]
     toc = [[Para(f'<font name="Baloo" color="#BD2239">{i}</font>', S["toc"]), Para(t, S["toc"])]
            for i, t in enumerate(SECTIONS + ([LAST[reader]] if reader in LAST else []), 1)]
     toc.append([Para('<font name="Baloo" color="#BD2239">★</font>', S["toc"]),
@@ -341,7 +412,9 @@ def story(reader: str) -> list:
               "Settings → Permissions for Team Leaders and Members; and picking who gets the email. "
               "New in 2.2: every export is also saved in the team's Google Drive folder, in a folder for its type, "
               "with the date and time in its name; and due dates take a time, as in the Team Hub. "
-              "New in 2.3: <b>Help</b> under your photo, with the guide for your role.", "good",
+              "New in 2.3: <b>Help</b> under your photo, with the guide for your role. New in 2.4: read the guide "
+              "inside the app, as in the Team Hub, with the Team Hub's delete passwords for Team Leaders and "
+              "Managers.", "good",
               "What's new in version 2")]
     s.append(PageBreak())
 
@@ -419,10 +492,12 @@ def story(reader: str) -> list:
     s += [shot("13-menu", "Click your photo (or initials) for Settings, Help and Sign Out.", 0.45,
                crop=(0.6, 0.0, 0.86, 0.32))]
     s += [P("Help", "h2"),
-          P("Your photo → <b>Help</b> opens this guide, the one for your role: the <b>TC Guide</b>, the <b>Team "
-            "Leader Guide</b> (with approving lessons) or the <b>Manager Guide</b>. It also shows what your role "
-            "can do and a short list of the everyday steps. Managers can open all three, to send the right one to "
-            "someone new."),
+          P("Your photo → <b>Help</b> has this guide, the one for your role: the <b>TC Guide</b>, the <b>Team "
+            "Leader Guide</b> (with approving lessons and the Team Hub's delete passwords) or the <b>Manager "
+            "Guide</b>. <b>Read The Guide</b> opens it inside the app, as the Team Hub's Help does: the contents on "
+            "the left (a row along the top on a phone), the guide with its pictures on the right. <b>PDF</b> opens "
+            "this file to print or save. Help also shows what your role can do and the everyday steps. Managers can "
+            "read all three, to send the right one to someone new."),
           shot("27-help", "Help: your guide, what your role can do, and the everyday steps.", 1.0,
                crop=(0.14, 0.12, 0.86, 0.98), max_h=4.4)]
     s += [P("On a phone", "h2"),
@@ -744,9 +819,10 @@ def story(reader: str) -> list:
                      "Permissions lets Team Leaders (and Members, if you choose) approve lessons and add missing "
                      "items too.")
     else:
-        s += section(14, "For Team Leaders: Approving Lessons",
+        s += section(14, "For Team Leaders",
                      "Team Leaders approve what the agent learns, as the Managers do, while Settings → Permissions "
-                     "allows it. A manager sets up the team and the settings.")
+                     "allows it, and use the Team Hub's delete passwords. A manager sets up the team and the "
+                     "settings.")
     s += [P("Approving lessons (Knowledge tab)", "h2"),
           shot("16-knowledge", "Knowledge: how the agent scores, the active lessons, the checklist, and the Feedback "
                                "Inbox.", 1.0, crop=(0.14, 0.12, 0.86, 1.0), max_h=4.4)]
@@ -765,6 +841,17 @@ def story(reader: str) -> list:
             "commitments the team provided. Further down: the training examples with their latest score, and "
             "<b>The Professional Checklist</b> (34 checks the agent runs on every deal)."),
           shot("17-lessons", "Lessons: each one can be turned off and on.", 1.0, crop=(0.14, 0.56, 0.86, 1.0))]
+    # the Team Hub's delete passwords: only in the app (Help reads them from the hub), never printed
+    hub_pw = ("Deleting a task or subtask in the Universal Team Hub that isn't yours asks for its department's "
+              "password.")
+    s += [Para("Team Hub delete passwords", S["h2"]),
+          Para(f"{hub_pw} The ones your role may use are shown in the app, never in this PDF: your photo → Help → "
+               "Read The Guide, section 14.", S["p"])]
+    emit(f"<h3>Team Hub delete passwords</h3><p>{hub_pw} "
+         + ("Managers see every department's, and the people who have their own." if reader == "manager"
+            else "Team Leaders see their departments'.")
+         + " They come straight from the Team Hub each time you open this guide, and are never printed.</p>"
+         "<div data-hub-pw></div>")
     if reader != "manager":
         return s
     s += [CondPageBreak(4.5 * inch), P("Team (Managers only)", "h2"),
@@ -820,6 +907,16 @@ def story(reader: str) -> list:
     return s
 
 
+MARKS = (  # the Quick Reference Card's last row
+    ("Source marks", "<b>✓</b> quote found on the page · <b>✗</b> check it yourself · no mark: scanned page or "
+                     "checklist item"),
+    ("Due dates", "Payoffs 10 days before closing · court / curative 14 · documents 5 · bring-down 5 · paid at "
+                  "the table: closing day · weekends move to Friday"),
+    ("Team Hub", "Closing Blockers only · one task per deal (Title - address) · ticks travel both ways · "
+                 "catch-up every weekday morning"),
+)
+
+
 def reference_card() -> list:
     """The last page, for everyone."""
     s = [PageBreak(), P("Quick Reference Card", "h1"), P("Print this page and keep it at your desk.", "lead")]
@@ -851,6 +948,11 @@ def reference_card() -> list:
                              ("BOTTOMPADDING", (0, 0), (-1, -1), 8), ("LEFTPADDING", (0, 0), (-1, -1), 9),
                              ("ROUNDEDCORNERS", [8, 8, 8, 8])]))
     s += [P("Priorities", "h2"), pri, Spacer(1, 8)]
+    emit('<div class="g-cards"><div style="background:#FBF0F2"><b style="color:#BD2239">Closing Blocker</b>Stops the '
+         'closing. Payoffs, liens, judgments, court items. Also in the Team Hub.</div><div style="background:#FFF1E0">'
+         '<b style="color:#B45309">Before Closing</b>Needed by closing day. Deed, entity docs, estoppel, forms.</div>'
+         '<div style="background:#EAE9F4"><b style="color:#4D458A">Review / FYI</b>Stays on the policy. Easements, '
+         'restrictions, notes.</div></div>')
     s.append(P("Statuses", "h2"))
     st = Table([[Para(f'<font name="Nunito-Bold">{a}</font><br/>{b}', S["cell"]) for a, b in
                  (("Open", "Not started"), ("Ordered", "Requested"), ("Received", "In hand"),
@@ -858,24 +960,25 @@ def reference_card() -> list:
     st.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), LAV), ("LINEAFTER", (0, 0), (3, 0), 3, colors.white),
                             ("TOPPADDING", (0, 0), (-1, -1), 7), ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
                             ("ROUNDEDCORNERS", [8, 8, 8, 8])]))
-    marks = Table([[Para(f'<font name="Nunito-Bold">{a}</font><br/>{b}', S["cell"]) for a, b in (
-        ("Source marks", "<b>✓</b> quote found on the page · <b>✗</b> check it yourself · no mark: scanned page or "
-                         "checklist item"),
-        ("Due dates", "Payoffs 10 days before closing · court / curative 14 · documents 5 · bring-down 5 · paid at "
-                      "the table: closing day · weekends move to Friday"),
-        ("Team Hub", "Closing Blockers only · one task per deal (Title - address) · ticks travel both ways · "
-                     "catch-up every weekday morning"))]], colWidths=[WIDTH / 3] * 3)
+    marks = Table([[Para(f'<font name="Nunito-Bold">{a}</font><br/>{b}', S["cell"]) for a, b in MARKS]],
+                  colWidths=[WIDTH / 3] * 3)
     marks.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), LAV), ("VALIGN", (0, 0), (-1, -1), "TOP"),
                                ("LINEAFTER", (0, 0), (1, 0), 4, colors.white), ("TOPPADDING", (0, 0), (-1, -1), 8),
                                ("BOTTOMPADDING", (0, 0), (-1, -1), 8), ("LEFTPADDING", (0, 0), (-1, -1), 9),
                                ("ROUNDEDCORNERS", [8, 8, 8, 8])]))
     s += [st, Spacer(1, 10), marks]
+    emit('<div class="g-cards">' + "".join(f"<div><b>{a}</b>{b}</div>" for a, b in (
+        ("Open", "Not started"), ("Ordered", "Requested"), ("Received", "In hand"), ("Cleared", "Done"),
+        ("Waived", "Not needed + note"))) + "</div>")
+    emit('<div class="g-cards">' + "".join(f"<div><b>{a}</b>{web(b)}</div>" for a, b in MARKS) + "</div>")
     return s
 
 
 def build() -> list[Path]:
+    """The three PDFs, and guides.json with the same guides as HTML for the page's Help."""
+    global WEB
     OUT.mkdir(parents=True, exist_ok=True)
-    out = []
+    out, guides = [], {}
     for reader, guide in GUIDES.items():
         path = OUT / guide[2]
         doc = BaseDocTemplate(str(path), pagesize=letter, title=f"{APP} {guide[0]}",
@@ -885,9 +988,18 @@ def build() -> list[Path]:
         body = Frame(MARGIN, 0.8 * inch, WIDTH, PAGE_H - 1.75 * inch, id="body")
         doc.addPageTemplates([PageTemplate("cover", [cover_frame], onPage=cover),
                               PageTemplate("inner", [body], onPage=inner)])
-        doc.build([Spacer(1, 1), *story(reader), *reference_card()])
+        WEB, NAV[:] = [], []
+        flowables = [*story(reader), *reference_card()]
+        guides[reader] = {"title": guide[0], "for": guide[1].removeprefix("For: "), "pdf": f"/guides/{guide[2]}",
+                          "sections": list(NAV), "html": "\n".join(WEB)}
+        WEB = None
+        doc.build([Spacer(1, 1), *flowables])
         out.append(path)
-    return out
+    (OUT / "guides.json").write_text(json.dumps(guides, ensure_ascii=False), encoding="utf-8")
+    for old in WEB_IMG.glob("*.jpg"):  # pictures the guides no longer use
+        if old.name not in WEB_USED:
+            old.unlink()
+    return [*out, OUT / "guides.json"]
 
 
 if __name__ == "__main__":

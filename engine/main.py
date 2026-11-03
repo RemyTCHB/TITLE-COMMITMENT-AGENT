@@ -296,6 +296,19 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     def me(u: User = Depends(user)):
         return {"email": u.email, "admin": u.admin, "role": u.role, "can": u.can}
 
+    @app.get("/v1/help/passwords")
+    def help_passwords(u: User = Depends(user), e: Engine = Depends(eng)):
+        """The Team Hub's delete passwords for Help: Team Leaders their departments, Managers all (the hub decides
+        from its team), Members none. Fetched from the hub each time, never kept or logged here."""
+        if u.role not in ("lead", "manager") and not u.admin:
+            out = {"rows": [], "own": []}
+        else:
+            try:
+                out = hub.passwords(e.secrets, u.email)
+            except hub.HubPasswordsError as exc:
+                raise HTTPException(503, str(exc)) from exc
+        return JSONResponse(out, headers={"Cache-Control": "no-store"})
+
     @app.get("/v1/reference")
     def reference(u: User = Depends(user), e: Engine = Depends(eng)):
         """What the page needs from the Python side: deal types, the professional checklist, connections."""

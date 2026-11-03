@@ -312,3 +312,12 @@ def test_help_links_the_guides_the_builder_makes():
                            .read_text(encoding="utf-8")))
     assert len(linked) == 3 and linked == built
     assert all((root / "web" / "public" / "guides" / f).is_file() for f in linked)
+    # the same guides inside the app (Help → Read The Guide); only Team Leaders' and Managers' show the passwords
+    import json
+
+    guides = json.loads((root / "web" / "public" / "guides" / "guides.json").read_text(encoding="utf-8"))
+    assert set(guides) == {"member", "lead", "manager"}
+    assert {g["pdf"].removeprefix("/guides/") for g in guides.values()} == linked
+    assert ["data-hub-pw" in guides[r]["html"] for r in ("member", "lead", "manager")] == [False, True, True]
+    pictures = set(re.findall(r'src="/guides/img/([^"]+)"', "".join(g["html"] for g in guides.values())))
+    assert pictures and all((root / "web" / "public" / "guides" / "img" / f).is_file() for f in pictures)

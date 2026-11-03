@@ -47,6 +47,7 @@ export const api = {
   putSettings: body => call('PUT', '/v1/settings', body),
   putTeam: body => call('PUT', '/v1/team', body),
   googleCheck: () => call('POST', '/v1/google/check'),
+  helpPasswords: () => call('GET', '/v1/help/passwords'),
 
   async download(dealId, format, include) {
     const res = await call('GET', `/v1/deals/${dealId}/export?format=${format}&include=${include}`, null, { raw: true });
