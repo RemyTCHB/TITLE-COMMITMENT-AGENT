@@ -146,6 +146,9 @@ def passwords(secrets, email: str, post=None) -> dict:
         raise HubPasswordsError("Couldn't reach the Team Hub. Try again.") from exc
     if r.status_code == 404:
         raise HubPasswordsError("The Team Hub doesn't share its passwords with this app yet.")
+    if r.status_code == 401:  # the deal sync would be failing too
+        raise HubPasswordsError("The Team Hub didn't accept this app's signature: HUB_SYNC_SECRET (GitHub) must match "
+                                "the hub's TITLE_AGENT_SYNC_SECRET. Tell a manager.")
     if r.status_code != 200:
         raise HubPasswordsError(f"The Team Hub couldn't load the passwords ({r.status_code}). Try again.")
     out = r.json()

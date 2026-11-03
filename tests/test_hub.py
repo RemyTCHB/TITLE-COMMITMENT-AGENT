@@ -149,6 +149,8 @@ def test_help_passwords_come_from_the_hub_signed():
                    "own": [{"name": "Sample Person", "pw": "made-up-3"}]}
     with pytest.raises(hub.HubPasswordsError, match="doesn't share"):  # the hub hasn't added the endpoint yet
         hub.passwords(SECRETS, "a@totalchb.com", post=lambda *a, **k: Answer(404))
+    with pytest.raises(hub.HubPasswordsError, match="must match"):  # the two apps' secrets differ
+        hub.passwords(SECRETS, "a@totalchb.com", post=lambda *a, **k: Answer(401))
     with pytest.raises(hub.HubPasswordsError, match="isn't connected"):
         hub.passwords(Secrets(None, None, None), "a@totalchb.com")
 
