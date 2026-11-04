@@ -1,23 +1,25 @@
-// Help (everyone, from the account menu): the user guide for the person's role, read in the app as in the Universal
-// Team Hub (contents on the left, the guide with its pictures; full screen on a phone) or as a PDF, what their role
-// can do, and the everyday steps. Team Leaders and Managers also see the Team Hub's delete passwords in their guide,
-// fetched from the hub through the engine each time (never in the page or the PDF).
-// docs/guide/build_guide.py builds the PDFs and guides.json (the same guides as HTML) into public/guides/.
+// Help, set up as in the Universal Team Hub: your photo → Help (or Settings → Open Help) opens a panel with the guide for
+// your role. At the top, the guide PDFs to open or download: yours first (Team Leaders and Managers: your own copy ends
+// with a page of your Team Hub delete passwords, added here in the browser), then the other guides your role may send
+// on (without passwords). Below, the guide itself: contents on the left (a row along the top on narrower screens), the
+// guide with its pictures on the right; full screen on a phone. The passwords come from the hub through the engine each
+// time (GET /v1/help/passwords), never stored. docs/guide/build_guide.py builds the PDFs and guides.json (the same
+// guides as HTML) into public/guides/.
 import { createPortal } from 'preact/compat';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { api } from '../api.js';
-import { Icon, Spinner } from '../ui.jsx';
+import { useSettings } from '../data.js';
+import { Icon, Spinner, useToast, when } from '../ui.jsx';
 
 const GUIDES = {
-  member: { name: 'TC Guide', file: 'Title_Commitment_Agent_TC_Guide.pdf',
+  member: { name: 'TC Guide', file: 'Title_Commitment_Agent_TC_Guide.pdf', for: 'for TCs',
     about: 'Reviewing commitments, working the list, exports, the Team Hub and the daily email.' },
-  lead: { name: 'Team Leader Guide', file: 'Title_Commitment_Agent_Team_Leader_Guide.pdf',
-    about: 'The TC Guide plus section 14: approving what the agent learns, and the Team Hub\'s delete passwords.' },
-  manager: { name: 'Manager Guide', file: 'Title_Commitment_Agent_Manager_Guide.pdf',
-    about: 'Everything, plus section 14: the team, settings, permissions, connections and every delete password.' },
+  lead: { name: 'Team Leader Guide', file: 'Title_Commitment_Agent_Team_Leader_Guide.pdf', for: 'for Team Leaders',
+    about: 'Ends with your departments\' delete passwords.' },
+  manager: { name: 'Manager Guide', file: 'Title_Commitment_Agent_Manager_Guide.pdf', for: 'for Managers',
+    about: 'Ends with every delete password.' },
 };
-const ROLE = { manager: 'Manager', lead: 'Team Leader', member: 'Member' };
-const url = g => `/guides/${g.file}`;
+const SHARE = { manager: ['manager', 'lead', 'member'], lead: ['lead', 'member'], member: ['member'] };
 
 // Which guide is yours: Managers get theirs; anyone who may approve lessons gets the Team Leader Guide.
 export function guideFor(me) {
@@ -25,58 +27,115 @@ export function guideFor(me) {
   return me?.can?.approve_lessons ? 'lead' : 'member';
 }
 
-const STEPS = [
-  ['New commitment', 'Analyze → drop the PDF (and the contract) → Read Documents → confirm the deal type and closing date → Run Full Review.'],
-  ['Every morning', 'Read the 8 AM email → open each deal → Open Only → work what\'s due → update statuses and notes.'],
-  ['Item done', 'Tick its box (Cleared). A Closing Blocker is ticked done in the Team Hub too.'],
-  ['Set a due date', 'Click the date on the item → pick the day → − / + for the time → Set Due Date.'],
-  ['Send the list', 'Deal → Export List → pick what to include → PDF, Word, Excel, CSV, Google Sheets or Docs. A copy is kept in the team\'s Drive folder.'],
-  ['Revised commitment', 'Deal → Updated Commitment → upload → Read Documents → Run Full Review. Statuses and notes carry over.'],
-  ['Deal closed', 'Bottom of the deal → Mark Deal Closed.'],
-];
-const MISSING = ['Something\'s missing', 'Deal → Report Missing Item → fill it in → Send Feedback.'];
-const APPROVE = ['Approve a lesson', 'Knowledge → Feedback Inbox → edit it into a general rule (no names, amounts or case numbers) → Approve Lesson.'];
-const MANAGE = [
-  ['Team', 'Your photo → Team: add people, roles, departments and photos → Save Changes.'],
-  ['Settings', 'Your photo → Settings: permissions, who gets the email, due dates, the Drive folder → Save Settings.'],
-];
-
 let guidesP = null;  // guides.json, fetched once
 const loadGuides = () => (guidesP = guidesP || fetch('/guides/guides.json', { cache: 'no-cache' })
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
   .catch(e => { guidesP = null; throw e; }));
 
-function Passwords({ pw, reader, mine }) {
-  if (!mine) return <p class="note">{reader === 'manager' ? 'Managers see every delete password here.' : 'Team Leaders see their departments\' delete passwords here.'}</p>;
+// Settings → Help, as in the hub's My Settings.
+export function HelpCard({ me, onOpen }) {
+  const role = guideFor(me);
+  return (
+    <div class="help-card">
+      <Icon name="help" size={28} />
+      <div>
+        <b>Help</b>
+        <span>The {GUIDES[role].name}, with screenshots{role === 'member' ? '.'
+          : ` and the Team Hub's delete passwords for ${role === 'manager' ? 'every department' : 'your departments'}.`}</span>
+      </div>
+      <button class="btn primary pill sm" type="button" onClick={onOpen}>Open Help</button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- your own PDF: + Your Delete Passwords
+const get = u => fetch(u, { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error(`Could not load ${u}`); return r.arrayBuffer(); });
+
+async function withPasswords(base, { role, who, pw, guide }) {
+  const [{ PDFDocument, rgb }, { default: fontkit }] = await Promise.all([import('pdf-lib'), import('@pdf-lib/fontkit')]);
+  const doc = await PDFDocument.load(base);
+  doc.registerFontkit(fontkit);
+  const [fh, fb, fr] = await Promise.all(['Baloo2-700-latin.ttf', 'NunitoSans-700-latin.ttf', 'NunitoSans-400-latin.ttf']
+    .map(f => get(`/guides/fonts/${f}`).then(b => doc.embedFont(b))));
+  const hex = h => rgb(parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255);
+  const INDIGO = hex('#4d458a'), RED = hex('#bd2239'), INK = hex('#211e33'), BODY = hex('#47445a'), MUTED = hex('#767388');
+  const LAV = hex('#f2f1f9'), LINE = hex('#dddbea');
+  const W = 612, H = 792, M = 58, page = doc.addPage([W, H]);
+  let y = H - 70;
+  const text = (t, x, yy, f, size, color) => page.drawText(String(t).replace(/[\u202f\u00a0]/g, ' '), { x, y: yy, font: f, size, color });
+  const wrap = (t, f, size, width) => {
+    const out = []; let line = '';
+    t.split(' ').forEach(w => { const next = line ? `${line} ${w}` : w; if (f.widthOfTextAtSize(next, size) > width && line) { out.push(line); line = w; } else line = next; });
+    if (line) out.push(line);
+    return out;
+  };
+  const para = (t, f = fr, size = 10.5, color = BODY, gap = 15) => { wrap(t, f, size, W - 2 * M).forEach(l => { text(l, M, y, f, size, color); y -= gap; }); y -= 4; };
+  const fit = (t, f, size, width) => { let s = t; while (s.length > 1 && f.widthOfTextAtSize(s, size) > width) s = s.slice(0, -4) + '...'; return s; };
+  text('TITLE COMMITMENT AGENT', M, y, fb, 9, RED); y -= 30;
+  text('Your Delete Passwords', M, y, fh, 26, INDIGO); y -= 14;
+  page.drawRectangle({ x: M, y, width: 60, height: 3, color: RED }); y -= 22;
+  para(`For ${who} · ${role === 'manager' ? 'Manager' : 'Team Leader'} · ${when(new Date())}`, fr, 9.5, MUTED, 13);
+  para(role === 'manager'
+    ? 'Every delete password in the Universal Team Hub, straight from the hub. Use a department\'s Team Leader password to delete someone else\'s task there, and its subtask password to remove a subtask.'
+    : 'The passwords for the departments you lead in the Universal Team Hub, straight from the hub. Use the Team Leader password to delete a team member\'s task, and the subtask password to remove a subtask. Share only the subtask password with your members when they need it.');
+  y -= 6;
+  const cols = [M, M + 170, M + 340], rows = [...pw.rows.map(r => [r.dept, r.lead || 'Not set', r.sub || 'Not set']),
+    ...pw.own.map(o => [`${o.name} (own)`, o.pw, o.pw])];
+  page.drawRectangle({ x: M, y: y - 8, width: W - 2 * M, height: 26, color: INDIGO });
+  [role === 'manager' ? 'Department or person' : 'Department', 'Team Leader password (tasks)', 'Subtask password']
+    .forEach((h, i) => text(h, cols[i] + 10, y, fh, 10, rgb(1, 1, 1)));
+  y -= 30;
+  rows.forEach((r, i) => {
+    if (i % 2) page.drawRectangle({ x: M, y: y - 9, width: W - 2 * M, height: 26, color: LAV });
+    r.forEach((v, j) => text(fit(v, j ? fr : fb, 10.5, 160), cols[j] + 10, y, j ? fr : fb, 10.5, INK));
+    page.drawLine({ start: { x: M, y: y - 9 }, end: { x: W - M, y: y - 9 }, thickness: 0.6, color: LINE });
+    y -= 26;
+  });
+  if (!rows.length) para(role === 'manager' ? 'No delete passwords are set up in the Team Hub yet.'
+    : 'No departments are turned on for you in the Team Hub yet, so there are no passwords to show. Ask a manager.');
+  y -= 14;
+  para('Passwords are case-sensitive. Keep this page private: it is added only to your own copy, and only when you open or download it from Help.', fr, 9.5, MUTED, 13);
+  text(`Title Commitment Agent · ${guide} · Confidential`, M, 34, fb, 8, INDIGO);
+  text(String(doc.getPageCount()), W - M - 8, 34, fb, 8, RED);
+  return doc.save();
+}
+
+function Passwords({ pw, role }) {
   if (!pw) return <p class="note"><Spinner /> Loading your passwords from the Team Hub…</p>;
-  if (pw.error) return <p class="note red">{pw.error} Close the guide and open it again to retry.</p>;
+  if (pw.error) return <p class="note red">{pw.error} Close Help and open it again to retry.</p>;
   const rows = [...pw.rows.map(r => [r.dept, r.lead, r.sub]), ...pw.own.map(o => [`${o.name} (own, tasks and subtasks)`, o.pw, o.pw])];
-  if (!rows.length) return <p class="note">{reader === 'manager' ? 'No delete passwords are set up in the Team Hub yet.' : 'No departments are turned on for you in the Team Hub yet, so there are no passwords to show. Ask a manager.'}</p>;
+  if (!rows.length) return <p class="note">{role === 'manager' ? 'No delete passwords are set up in the Team Hub yet.' : 'No departments are turned on for you in the Team Hub yet, so there are no passwords to show. Ask a manager.'}</p>;
   const code = v => v ? <code>{v}</code> : <span class="muted">Not set</span>;
   return (
     <div class="g-table g-pw">
       <table>
-        <thead><tr><th>{reader === 'manager' ? 'Department or person' : 'Department'}</th><th>Team Leader password (tasks)</th><th>Subtask password</th></tr></thead>
+        <thead><tr><th>{role === 'manager' ? 'Department or person' : 'Department'}</th><th>Team Leader password (tasks)</th><th>Subtask password</th></tr></thead>
         <tbody>{rows.map(([who, lead, sub]) => <tr key={who}><td class="b">{who}</td><td>{code(lead)}</td><td>{code(sub)}</td></tr>)}</tbody>
       </table>
     </div>
   );
 }
 
-// The guide inside the app: contents (sections) on the left, the guide on the right; it follows your scrolling.
-function GuideReader({ reader, mine, onClose }) {
+// The Help panel: the guide PDFs, then the guide (contents + text); it follows your scrolling.
+export function HelpPanel({ me, onClose }) {
+  const toast = useToast();
+  const s = useSettings();
+  const role = guideFor(me);
   const [g, setG] = useState(null), [err, setErr] = useState(''), [sec, setSec] = useState(0), [pw, setPw] = useState(null);
-  const body = useRef(null), panel = useRef(null);
+  const [busy, setBusy] = useState('');
+  const body = useRef(null), panel = useRef(null), pwP = useRef(null);
   useEffect(() => {
-    loadGuides().then(all => setG(all[reader])).catch(() => setErr('Could not load the guide. Check your connection and try again.'));
-    if (mine && reader !== 'member') api.helpPasswords().then(setPw).catch(e => setPw({ error: e.message }));
+    loadGuides().then(all => setG(all[role])).catch(() => setErr('Could not load the guide. Check your connection and try again.'));
+    if (role !== 'member') {
+      pwP.current = api.helpPasswords().then(p => { setPw(p); return p; }).catch(e => { const p = { error: e.message }; setPw(p); return p; });
+    }
     const key = e => e.key === 'Escape' && onClose();
     document.addEventListener('keydown', key);
     document.body.style.overflow = 'hidden';
     panel.current?.focus();
     return () => { document.removeEventListener('keydown', key); document.body.style.overflow = ''; };
-  }, [reader]);
-  useEffect(() => {  // keep the section you're on in view in the contents (a sideways row on a phone)
+  }, [role]);
+  useEffect(() => {  // keep the section you're on in view in the contents (a sideways row on narrower screens)
     panel.current?.querySelector('.guide-nav button.on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [sec, g]);
   const heads = () => [...(body.current?.querySelectorAll('h2[data-sec]') || [])];
@@ -87,18 +146,62 @@ function GuideReader({ reader, mine, onClose }) {
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 4) i = heads().length - 1;
     if (i !== sec) setSec(i);
   };
+  // a guide PDF: yours (Team Leaders and Managers: + Your Delete Passwords), or another to send on, without passwords
+  const pdf = async (kind, how) => {
+    const guide = GUIDES[kind], mine = kind === role;
+    const tab = how === 'open' ? window.open('', '_blank') : null;  // now, while the click still counts (pop-up blockers)
+    setBusy(kind + how);
+    try {
+      let bytes = await get(`/guides/${guide.file}`);
+      if (mine && role !== 'member') {
+        const p = await pwP.current;
+        if (!p || p.error) throw new Error(p?.error || 'Your passwords could not be loaded. Close Help and open it again.');
+        const person = (s?.team || []).find(x => x.email === me.email);
+        bytes = await withPasswords(bytes, { role, pw: p, guide: guide.name,
+          who: person ? `${person.name} (${me.email})` : me.email });
+      }
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      if (tab) tab.location.href = url;
+      else {
+        const a = Object.assign(document.createElement('a'), { href: url, download: guide.file });
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) {
+      tab?.close();
+      toast(e.message || 'Could not make the PDF.', true);
+    } finally { setBusy(''); }
+  };
   const [before, after] = g ? g.html.split('<div data-hub-pw></div>') : ['', ''];
   return createPortal(  // on the page body, above the header (the main column is a layer of its own)
     <div class="guide-scrim" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div class="guide-panel" role="dialog" aria-modal="true" aria-label={g?.title || 'Help'} tabIndex={-1} ref={panel}>
+      <div class="guide-panel" role="dialog" aria-modal="true" aria-label="Help" tabIndex={-1} ref={panel}>
         <div class="guide-head">
           <div>
             <span class="eyebrow">Help</span>
-            <h2>{g?.title || GUIDES[reader].name}</h2>
-            <p>Title Commitment Agent · for {g?.for || '…'}</p>
+            <h2>{GUIDES[role].name}</h2>
+            <p>Title Commitment Agent · {GUIDES[role].for}</p>
           </div>
-          <a class="btn glass pill sm" href={url(GUIDES[reader])} target="_blank" rel="noopener"><Icon name="download" /> PDF</a>
           <button class="guide-close" onClick={onClose} title="Close" aria-label="Close"><Icon name="x" /></button>
+        </div>
+        <div class="guide-pdfs">
+          {SHARE[role].map(k => {
+            const mine = k === role;
+            return (
+              <div key={k} class={`guide-pdf ${mine ? 'mine' : ''} ${busy.startsWith(k) ? 'busy' : ''}`}>
+                <Icon name="book" size={18} />
+                <div>
+                  <b>{GUIDES[k].name}{mine && <span class="chip green">Yours</span>}</b>
+                  <span>{mine ? GUIDES[k].about : 'Without passwords, to send to someone.'}</span>
+                </div>
+                <div class="guide-pdf-acts">
+                  <button type="button" class={`btn pill sm ${mine ? 'primary' : 'glass'}`} title="Open the PDF in a new tab"
+                    onClick={() => pdf(k, 'open')}>{busy === `${k}open` ? <Spinner /> : <Icon name="file" />} {busy === `${k}open` ? 'Preparing…' : 'Open'}</button>
+                  <button type="button" class="btn ghost pill sm" title="Download the PDF"
+                    onClick={() => pdf(k, 'download')}>{busy === `${k}download` ? <Spinner /> : <Icon name="download" />} Download</button>
+                </div>
+              </div>);
+          })}
         </div>
         <div class="guide-main">
           <nav class="guide-nav" aria-label="Contents">
@@ -106,87 +209,16 @@ function GuideReader({ reader, mine, onClose }) {
               <button key={x.id} class={i === sec ? 'on' : ''} onClick={() => goTo(i)}><span>{x.num}</span>{x.title}</button>))}
           </nav>
           <div class="guide-body" ref={body} onScroll={onScroll}>
-            {!g ? <p class="note">{err || <><Spinner /> Loading the guide…</>}</p> : (
-              <>
-                <div dangerouslySetInnerHTML={{ __html: before }} />
-                {after !== undefined && <Passwords pw={pw} reader={reader} mine={mine} />}
-                {after !== undefined && <div dangerouslySetInnerHTML={{ __html: after }} />}
-              </>)}
+            <div class="guide-text">
+              {!g ? <p class="note">{err || <><Spinner /> Loading the guide…</>}</p> : (
+                <>
+                  <div dangerouslySetInnerHTML={{ __html: before }} />
+                  {after !== undefined && <Passwords pw={pw} role={role} />}
+                  {after !== undefined && <div dangerouslySetInnerHTML={{ __html: after }} />}
+                </>)}
+            </div>
           </div>
         </div>
       </div>
     </div>, document.body);
-}
-
-function GuideCard({ g, mine, onRead }) {
-  return (
-    <article class={`card help-guide ${mine ? 'mine' : ''}`}>
-      <span class="help-icon"><Icon name="book" size={22} /></span>
-      <div class="help-text">
-        <b>{g.name}{mine && <span class="chip green">Yours</span>}</b>
-        <span>{g.about}</span>
-      </div>
-      <div class="toolbar">
-        <button class={`btn pill sm ${mine ? 'primary' : 'glass'}`} onClick={onRead}><Icon name="book" /> Read The Guide</button>
-        <a class="btn ghost pill sm" href={url(g)} target="_blank" rel="noopener"><Icon name="file" /> PDF</a>
-      </div>
-    </article>
-  );
-}
-
-export function Help({ me }) {
-  const yours = guideFor(me), can = me?.can || {};
-  const [reading, setReading] = useState('');
-  const role = me?.admin ? 'manager' : me?.role || 'member';
-  const abilities = [
-    ['Review commitments and work the list', true],
-    ['Export, and see the Team Hub and the daily email', true],
-    ['Report Missing Item', can.report_missing !== false],
-    ['Approve lessons (Knowledge → Feedback Inbox)', !!can.approve_lessons],
-    ['Change the team and the settings', !!me?.admin],
-  ];
-  const steps = [...STEPS.slice(0, 3), ...(can.report_missing !== false ? [MISSING] : []), ...STEPS.slice(3),
-    ...(can.approve_lessons ? [APPROVE] : []), ...(me?.admin ? MANAGE : [])];
-  return (
-    <>
-      <section class="hero">
-        <div class="hero-text">
-          <div class="eyebrow-row"><span class="eyebrow">{me ? ROLE[role] : 'Help'}</span></div>
-          <h1 class="title">Help And <span class="accent">Guides</span></h1>
-          <p class="lede">The guide for your role, what your role can do, and the everyday steps.</p>
-        </div>
-      </section>
-
-      <div class="section-head"><h2>Your Guide</h2><p>Read it here, or open the PDF to print or save.</p></div>
-      <GuideCard g={GUIDES[yours]} mine onRead={() => setReading(yours)} />
-
-      {me?.admin && (
-        <>
-          <div class="section-head"><h2>All Guides</h2><p>Send the right one to someone new.</p></div>
-          <div class="help-list">
-            {['member', 'lead'].map(k => <GuideCard key={k} g={GUIDES[k]} onRead={() => setReading(k)} />)}
-          </div>
-        </>)}
-
-      <div class="help-cols">
-        <section class="card help-card">
-          <h2>What You Can Do</h2>
-          <ul class="help-can">
-            {abilities.map(([text, ok]) => (
-              <li key={text} class={ok ? '' : 'off'}>
-                <span class="help-mark" aria-label={ok ? 'Yes' : 'No'}><Icon name={ok ? 'check' : 'x'} size={14} stroke={3} /></span>
-                {text}</li>))}
-          </ul>
-          {!me?.admin && <p class="row-sub" style="margin:0">A manager can change what your role may do (Settings → Permissions).</p>}
-        </section>
-        <section class="card help-card">
-          <h2>Everyday Steps</h2>
-          <dl class="help-steps">
-            {steps.map(([what, how]) => <div key={what}><dt>{what}</dt><dd>{how}</dd></div>)}
-          </dl>
-        </section>
-      </div>
-      {reading && <GuideReader reader={reading} mine={reading === yours} onClose={() => setReading('')} />}
-    </>
-  );
 }

@@ -412,9 +412,9 @@ def story(reader: str) -> list:
               "Settings → Permissions for Team Leaders and Members; and picking who gets the email. "
               "New in 2.2: every export is also saved in the team's Google Drive folder, in a folder for its type, "
               "with the date and time in its name; and due dates take a time, as in the Team Hub. "
-              "New in 2.3: <b>Help</b> under your photo, with the guide for your role. New in 2.4: read the guide "
-              "inside the app, as in the Team Hub, with the Team Hub's delete passwords for Team Leaders and "
-              "Managers.", "good",
+              "New in 2.3: <b>Help</b> under your photo, with the guide for your role. New in 2.4: Help works as in "
+              "the Team Hub: the guide inside the app, the PDFs to open or download, and the Team Hub's delete "
+              "passwords for Team Leaders and Managers.", "good",
               "What's new in version 2")]
     s.append(PageBreak())
 
@@ -492,14 +492,14 @@ def story(reader: str) -> list:
     s += [shot("13-menu", "Click your photo (or initials) for Settings, Help and Sign Out.", 0.45,
                crop=(0.6, 0.0, 0.86, 0.32))]
     s += [P("Help", "h2"),
-          P("Your photo → <b>Help</b> has this guide, the one for your role: the <b>TC Guide</b>, the <b>Team "
-            "Leader Guide</b> (with approving lessons and the Team Hub's delete passwords) or the <b>Manager "
-            "Guide</b>. <b>Read The Guide</b> opens it inside the app, as the Team Hub's Help does: the contents on "
-            "the left (a row along the top on a phone), the guide with its pictures on the right. <b>PDF</b> opens "
-            "this file to print or save. Help also shows what your role can do and the everyday steps. Managers can "
-            "read all three, to send the right one to someone new."),
-          shot("27-help", "Help: your guide, what your role can do, and the everyday steps.", 1.0,
-               crop=(0.14, 0.12, 0.86, 0.98), max_h=4.4)]
+          P("Your photo → <b>Help</b> (or Settings → <b>Open Help</b>) opens this guide inside the app, the one for "
+            "your role, as the Team Hub's Help does: the <b>TC Guide</b>, the <b>Team Leader Guide</b> (with approving "
+            "lessons and the Team Hub's delete passwords) or the <b>Manager Guide</b>. The contents are on the left (a "
+            "row along the top on a tablet or phone) and the guide with its pictures on the right. At the top, "
+            "<b>Open</b> or <b>Download</b> the PDF: a Team Leader's or Manager's own copy ends with a page of their "
+            "delete passwords. Team Leaders can also send the TC Guide, and Managers all three, without passwords."),
+          shot("27-help", "Help: the guide PDFs at the top, the contents on the left, the guide on the right.", 1.0,
+               crop=(0.0, 0.0, 1.0, 1.0), max_h=4.4)]
     s += [P("On a phone", "h2"),
           P("Same link, same sign-in. The tabs move to a second row, every item is a card you tap to open, and menus "
             "slide up from the bottom. Everything works on a phone, uploads and exports included; a computer is "
@@ -845,8 +845,8 @@ def story(reader: str) -> list:
     hub_pw = ("Deleting a task or subtask in the Universal Team Hub that isn't yours asks for its department's "
               "password.")
     s += [Para("Team Hub delete passwords", S["h2"]),
-          Para(f"{hub_pw} The ones your role may use are shown in the app, never in this PDF: your photo → Help → "
-               "Read The Guide, section 14.", S["p"])]
+          Para(f"{hub_pw} The ones your role may use are in the app (your photo → Help, section 14), and your own "
+               "copy of this PDF from Help ends with a page of them. This shared copy has none.", S["p"])]
     emit(f"<h3>Team Hub delete passwords</h3><p>{hub_pw} "
          + ("Managers see every department's, and the people who have their own." if reader == "manager"
             else "Team Leaders see their departments'.")

@@ -470,44 +470,20 @@ pre.code { margin: 0; padding: 14px; max-height: 320px; overflow: auto; border-r
   color: var(--tchb-indigo-700); }
 .person-chip:disabled { cursor: default; }
 
-/* Help (pages/Help.jsx) */
-.help-guide { display: flex; align-items: center; gap: 16px; padding: 18px 20px; flex-wrap: wrap; }
-.help-guide.mine { border-color: var(--tchb-indigo-500); }
-.help-icon { width: 46px; height: 46px; flex: none; border-radius: 14px; display: flex; align-items: center;
-  justify-content: center; background: var(--tchb-indigo-050); color: var(--tchb-indigo-700); }
-.help-text { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.help-text b { font-family: var(--font-display); font-weight: 800; font-size: 18px; color: var(--tchb-indigo-700);
-  display: flex; align-items: center; gap: 8px; }
-.help-text span:not(.chip) { font-size: 14px; color: var(--text-muted); }
-.help-guide .toolbar { margin: 0; }
-.help-list { display: flex; flex-direction: column; gap: 10px; }
-.help-cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 14px; align-items: start; }
-.help-card { padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
-.help-card h2 { font-size: 18px; font-weight: 800; }
-.help-can { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
-.help-can li { display: flex; align-items: center; gap: 10px; }
-.help-can li.off { color: var(--text-muted); }
-.help-mark { width: 22px; height: 22px; flex: none; border-radius: 999px; display: flex; align-items: center;
-  justify-content: center; background: var(--tchb-green-050); color: var(--tchb-green-600); }
-.help-can li.off .help-mark { background: var(--tchb-gray-100); color: var(--text-muted); }
-.help-steps { margin: 0; display: flex; flex-direction: column; gap: 0; }
-.help-steps div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; padding: 9px 0;
-  border-top: 1px solid var(--border-default); }
-.help-steps div:first-child { border-top: none; padding-top: 0; }
-.help-steps dt { font-family: var(--font-display); font-weight: 700; font-size: 14px; color: var(--tchb-indigo-700); }
-.help-steps dd { margin: 0; font-size: 14px; color: var(--text-body); }
-@media (max-width: 900px) { .help-cols { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 640px) {
-  .help-steps div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
-  .help-guide { padding: 16px; }
-}
+/* Help (pages/Help.jsx): the card on Settings, as in the hub's My Settings */
+.help-card { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 14px 16px;
+  border-radius: var(--radius-md); border: 1px solid var(--border-default); background: var(--tchb-indigo-050);
+  color: var(--tchb-indigo-700); }
+.help-card > div { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.help-card b { font-family: var(--font-display); font-weight: 800; font-size: 17px; }
+.help-card span { font-size: 13px; color: var(--text-muted); }
 
 /* The guide inside the app (Help → Read The Guide), as in the Universal Team Hub */
 .guide-scrim { position: fixed; inset: 0; z-index: 70; background: rgba(10, 12, 24, 0.45); }
 .guide-panel { position: fixed; z-index: 71; left: 50%; top: 24px; transform: translateX(-50%); box-sizing: border-box;
-  width: calc(100% - 32px); max-width: 1060px; height: calc(100vh - 48px); display: flex; flex-direction: column;
-  background: var(--surface-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-raised); overflow: hidden; outline: none; }
+  width: calc(100% - 48px); max-width: 1320px; height: calc(100vh - 48px); height: calc(100dvh - 48px);
+  display: flex; flex-direction: column; background: var(--surface-card); border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-raised); overflow: hidden; outline: none; }
 .guide-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px 20px 12px;
   border-bottom: 1px solid var(--border-default); }
 .guide-head > div { flex: 1; min-width: 0; }
@@ -516,8 +492,22 @@ pre.code { margin: 0; padding: 14px; max-height: 320px; overflow: auto; border-r
 .guide-close { width: 40px; height: 40px; flex: none; border: none; background: transparent; border-radius: 10px;
   cursor: pointer; color: var(--tchb-gray-500); display: flex; align-items: center; justify-content: center; }
 .guide-close:hover { background: var(--tchb-gray-100); }
+.guide-pdfs { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 20px; border-bottom: 1px solid var(--border-default);
+  background: var(--surface-subtle, var(--tchb-gray-100)); }
+.guide-pdf { flex: 1 1 280px; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px;
+  padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border-default); background: var(--surface-card);
+  color: var(--tchb-indigo-700); }
+.guide-pdf.mine { flex-basis: 340px; border-color: var(--tchb-indigo-500); }
+.guide-pdf.busy { opacity: 0.6; pointer-events: none; }
+.guide-pdf > div:not(.guide-pdf-acts) { flex: 1 1 140px; min-width: 0; display: flex; flex-direction: column; }
+.guide-pdf b { font-family: var(--font-display); font-weight: 700; font-size: 14px; display: flex; flex-wrap: wrap;
+  align-items: center; gap: 2px 6px; white-space: nowrap; }
+.guide-pdf span:not(.chip) { font-size: 12px; color: var(--text-muted); }
+.guide-pdf .chip { padding: 1px 8px; font-size: 11px; }
+.guide-pdf-acts { display: flex; flex-direction: row; align-items: center; gap: 4px; flex: none; margin-left: auto; }
+.guide-pdf .btn { padding: 7px 12px; font-size: 13px; }
 .guide-main { flex: 1; min-height: 0; display: flex; }
-.guide-nav { flex: none; width: 250px; overflow: auto; display: flex; flex-direction: column; gap: 2px; padding: 12px 10px;
+.guide-nav { flex: none; width: clamp(210px, 20vw, 260px); overflow: auto; display: flex; flex-direction: column; gap: 2px; padding: 12px 10px;
   border-right: 1px solid var(--border-default); }
 .guide-nav button { text-align: left; border: none; cursor: pointer; border-radius: 8px; padding: 8px 10px; flex: none;
   font-family: var(--font-display); font-weight: 700; font-size: 13px; line-height: 1.25; color: var(--tchb-gray-700);
@@ -525,11 +515,13 @@ pre.code { margin: 0; padding: 14px; max-height: 320px; overflow: auto; border-r
 .guide-nav button:hover { background: var(--tchb-indigo-050); }
 .guide-nav button.on { color: var(--tchb-indigo-700); background: var(--tchb-indigo-050); }
 .guide-nav button span { color: var(--tchb-red-500); margin-right: 6px; }
-.guide-body { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; position: relative; padding: 4px 32px 48px;
+.guide-body { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; position: relative;
+  padding: 4px clamp(16px, 3vw, 40px) 48px;
   font-size: 15px; line-height: 1.6; color: var(--text-body); }
 .guide-body h2 { font-family: var(--font-display); font-weight: 800; font-size: 22px; line-height: 1.25;
   color: var(--tchb-indigo-700); margin: 30px 0 8px; padding-top: 14px; border-top: 1px solid var(--border-default); }
-.guide-body > div:first-child > h2:first-child, .guide-body > div:first-child > :first-child { margin-top: 14px; }
+.guide-text { max-width: 980px; margin: 0 auto; }  /* lines stay readable on wide screens */
+.guide-text > div:first-child > :first-child { margin-top: 14px; }
 .guide-body .g-num { color: var(--tchb-red-500); margin-right: 10px; }
 .guide-body h3 { font-family: var(--font-display); font-weight: 700; font-size: 17px; color: var(--tchb-indigo-700); margin: 20px 0 6px; }
 .guide-body p { margin: 0 0 12px; }
@@ -557,7 +549,7 @@ pre.code { margin: 0; padding: 14px; max-height: 320px; overflow: auto; border-r
   color: #fff; background: var(--action-secondary); }
 .guide-body td { padding: 9px 12px; border-top: 1px solid var(--border-default); vertical-align: top; }
 .guide-body td.b { font-weight: 700; color: var(--text-strong, var(--tchb-indigo-700)); }
-.guide-body code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px;
+.guide-body code { white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px;
   background: var(--tchb-indigo-050); color: var(--tchb-indigo-700); padding: 2px 6px; border-radius: 5px; }
 .guide-body .muted { color: var(--text-muted); }
 .guide-body figure { margin: 10px auto 18px; text-align: center; }
@@ -576,13 +568,26 @@ pre.code { margin: 0; padding: 14px; max-height: 320px; overflow: auto; border-r
 .guide-body .g-cards > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px;
   background: var(--surface-subtle, var(--tchb-indigo-050)); font-size: 13px; }
 .guide-body .g-cards b { font-family: var(--font-display); font-size: 14px; color: var(--tchb-indigo-700); }
-@media (max-width: 640px) {
+@media (max-width: 960px) {  /* tablets and small laptops: the contents become a row along the top */
+  .guide-panel { width: calc(100% - 32px); top: 16px; height: calc(100vh - 32px); height: calc(100dvh - 32px); }
+  .guide-main { flex-direction: column; }
+  .guide-nav { width: auto; flex-direction: row; padding: 8px 12px; border-right: none;
+    border-bottom: 1px solid var(--border-default); }
+  .guide-nav button { white-space: nowrap; }
+}
+@media (max-width: 640px) {  /* phones: full screen, as in the hub */
   .guide-panel { inset: 0; left: 0; top: 0; transform: none; width: 100%; max-width: none; height: 100%; border: none;
     border-radius: 0; }
-  .guide-main { flex-direction: column; }
-  .guide-nav { width: auto; flex-direction: row; padding: 8px 12px; border-right: none; border-bottom: 1px solid var(--border-default); }
-  .guide-nav button { white-space: nowrap; }
+  .guide-head { padding: 12px 16px 10px; }
+  .guide-head h2 { font-size: 21px; }
+  .guide-pdfs { padding: 8px 12px; gap: 6px; max-height: 34vh; overflow-y: auto; }
+  .guide-pdf, .guide-pdf.mine { flex-basis: 100%; flex-wrap: nowrap; padding: 6px 8px; gap: 8px; }
+  .guide-pdf > svg { display: none; }
+  .guide-pdf > div:not(.guide-pdf-acts) { flex: 1 1 auto; }
+  .guide-pdf span:not(.chip) { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .guide-pdf .btn { padding: 6px 10px; font-size: 12.5px; gap: 5px; }
   .guide-body { padding: 4px 16px 40px; }
-  .guide-head .btn { display: none; }
   .guide-body .g-flow { grid-template-columns: 1fr; }
+  .guide-body .g-pair img { max-width: none; }
 }
+@media (max-width: 359px) { .guide-body { padding: 4px 12px 32px; font-size: 14px; } .guide-pdf .btn { padding: 6px 10px; } }

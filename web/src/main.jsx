@@ -14,7 +14,7 @@ import { Analyze } from './pages/Analyze.jsx';
 import { Knowledge } from './pages/Knowledge.jsx';
 import { Settings } from './pages/Settings.jsx';
 import { Team } from './pages/Team.jsx';
-import { Help } from './pages/Help.jsx';
+import { HelpPanel } from './pages/Help.jsx';
 import { useSettings } from './data.js';
 import { Training } from './pages/Training.jsx';
 
@@ -35,7 +35,7 @@ function MyAvatar({ user, onClick }) {
   );
 }
 
-function Header({ user, me, page }) {
+function Header({ user, me, page, onHelp }) {
   const [theme, setTheme] = useTheme();
   const menu = useMenu();
   return (
@@ -56,7 +56,7 @@ function Header({ user, me, page }) {
               <div class="label">{user.email}{me?.admin ? ' · manager' : me?.role === 'lead' ? ' · team leader' : ''}</div>
               <button onClick={() => go('settings')}><Icon name="settings" /> Settings</button>
               {me?.admin && <button onClick={() => go('team')}><Icon name="users" /> Team</button>}
-              <button onClick={() => go('help')}><Icon name="help" /> Help</button>
+              <button onClick={onHelp}><Icon name="help" /> Help</button>
               <hr />
               <button onClick={signOutNow}><Icon name="out" /> Sign Out</button>
             </Menu>
@@ -86,6 +86,7 @@ function App() {
   const [me, setMe] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [help, setHelp] = useState(false);  // the Help panel, as in the hub
   const route = useRoute();
   const bg = useRef(null);
   useEffect(() => startAurora(bg.current), []);
@@ -102,10 +103,11 @@ function App() {
     } finally { setBusy(false); }
   };
   const [page, arg, sub] = route;
+  useEffect(() => { if (page === 'help') { setHelp(true); go(''); } }, [page]);  // old #/help links open the panel
   return (
     <ToastHost>
       <canvas ref={bg} class="aurora" aria-hidden="true" />
-      <Header user={user} me={me} page={page} />
+      <Header user={user} me={me} page={page} onHelp={() => setHelp(true)} />
       <main class="main">
         {user === undefined ? <p class="lede" style="text-align:center"><Spinner /></p>
           : !user ? <Gate error={error} busy={busy} onSignIn={doSignIn} />
@@ -114,10 +116,10 @@ function App() {
                 : page === 'training' ? <Training />
                   : page === 'knowledge' ? <Knowledge me={me} />
                     : page === 'team' ? <Team me={me} />
-                      : page === 'help' ? <Help me={me} />
-                      : page === 'settings' ? <Settings me={me} />
+                      : page === 'settings' ? <Settings me={me} onHelp={() => setHelp(true)} />
                         : <Deals />}
       </main>
+      {user && help && <HelpPanel me={me} onClose={() => setHelp(false)} />}
     </ToastHost>
   );
 }

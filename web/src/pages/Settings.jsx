@@ -6,6 +6,7 @@ import { api } from '../api.js';
 import { useReference, useSettings } from '../data.js';
 import { Icon, Spinner, useToast } from '../ui.jsx';
 import { Avatar } from './Team.jsx';
+import { HelpCard } from './Help.jsx';
 
 const DUE = [['payoff', 'Payoff Letters'], ['curative', 'Court / Curative'], ['documents', 'Documents'],
   ['bring_down', 'Bring-Down'], ['closing', 'At Closing']];
@@ -28,7 +29,7 @@ function emailStatus(last) {
   return last.result === 'failed' ? ['Failed', `${at(last.at)} · ${last.detail}`, 'red'] : ['Skipped', `${at(last.at)} · ${last.detail}`, 'muted'];
 }
 
-export function Settings({ me }) {
+export function Settings({ me, onHelp }) {
   const toast = useToast();
   const s = useSettings();
   const ref = useReference();
@@ -82,6 +83,8 @@ export function Settings({ me }) {
           <p class="lede">Who May Do What, The Daily Email, Due Dates And The Google Folder.</p>
         </div>
       </section>
+
+      <HelpCard me={me} onOpen={onHelp} />
 
       <fieldset disabled={!admin} style="border:none;margin:0;padding:0;display:flex;flex-direction:column;gap:18px;min-width:0">
         <section class="card" style="padding:24px;display:flex;flex-direction:column;gap:14px">
