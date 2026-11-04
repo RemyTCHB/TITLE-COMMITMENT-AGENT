@@ -23,6 +23,26 @@ APP = os.environ.get("APP_URL") or hub.APP_URL
 NOBODY = "connection-check@totalchb.com"  # a team-domain address that is on no team: no passwords
 
 
+def secret_kept_off_the_page(secret: str | None) -> bool:
+    """The shared secret must never be in the public page (e.g. a Vercel setting named VITE_…, which the build puts
+    into the page's code). Looks through the live page's scripts; prints yes / no, never the value."""
+    import re
+
+    if not secret:
+        return True
+    try:
+        index = requests.get(f"{APP}/", timeout=30).text
+        scripts = set(re.findall(r'(?:src|href)="(/assets/[^"]+\.js)"', index))
+        texts = [index] + [requests.get(f"{APP}{s}", timeout=60).text for s in scripts]
+    except requests.RequestException as exc:
+        print(f"FAIL page code: {type(exc).__name__}")
+        return False
+    found = any(secret in t for t in texts)
+    print(f"{'FAIL' if found else 'ok  '} shared secret {'IS' if found else 'is not'} in the public page "
+          f"({len(scripts)} scripts checked)")
+    return not found
+
+
 def main() -> int:
     failed = 0
     secrets = load_secrets()
@@ -54,6 +74,7 @@ def main() -> int:
             ok = False
             print(f"FAIL {name}: {type(exc).__name__}")
         failed += not ok
+    failed += not secret_kept_off_the_page(secrets.hub_secret)
     print("All connections work." if not failed else f"{failed} check(s) failed.")
     return 1 if failed else 0
 
