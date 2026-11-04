@@ -97,7 +97,8 @@ input::placeholder, textarea::placeholder { color: var(--tchb-gray-500); }
 }
 .header.compact { background: color-mix(in srgb, var(--surface-card) 94%, transparent); }
 .header-row {
-  max-width: 1280px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; box-sizing: border-box;
+  max-width: 1280px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center;
+  box-sizing: content-box;  /* as the hub: 1280px of content, the 24px sides outside it */
   justify-content: space-between; flex-wrap: wrap; gap: 16px; transition: padding 160ms;
 }
 .header.compact .header-row { padding-top: 6px; padding-bottom: 6px; }
@@ -207,7 +208,8 @@ input::placeholder, textarea::placeholder { color: var(--tchb-gray-500); }
 
 /* ---------------------------------------------------------------- page */
 .main {
-  position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 36px 24px 96px; box-sizing: border-box;
+  position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 36px 24px 96px;
+  box-sizing: content-box;  /* as the hub: 1280px of content, the 24px sides outside it */
   display: flex; flex-direction: column; gap: 24px;
 }
 /* a page's title, centred (the header standard, section 2) */

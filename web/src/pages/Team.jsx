@@ -161,8 +161,9 @@ export function Team({ me }) {
 
       {loginAs && (
         <Modal title={`Login As ${loginAs.name}?`} onClose={() => !switching && setLoginAs(null)}>
-          <p class="lede" style="font-size:15px">You'll see and change exactly what {loginAs.name.split(' ')[0]} can.
-            Changes you make are recorded as theirs, via you. The bar at the top takes you back to your own account.</p>
+          <p class="lede" style="font-size:15px">You will see and work in the Title Commitment Agent exactly as
+            {' '}{loginAs.name} does. Anything you change is logged as made for them via you. Use Back To at the top to
+            come back.</p>
           <div class="actions">
             <button class="btn ghost pill" disabled={switching} onClick={() => setLoginAs(null)}>Cancel</button>
             <button class="btn primary pill" disabled={switching} onClick={async () => {

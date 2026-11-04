@@ -124,7 +124,7 @@ function ViewingAs({ user, me }) {
   const them = team.find(p => p.email === user.email), owner = team.find(p => p.email === me.imp);
   const back = async () => {
     setBusy(true);
-    try { await signInWithToken((await api.loginBack()).token); go(''); }
+    try { await signInWithToken((await api.loginBack()).token); go(''); toast('Back to your own view.'); }
     catch (e) {  // the server couldn't: sign in with Google instead
       toast(`${e.message} Sign in with your Google account.`, true);
       try { await signOutNow(); await signIn(); } catch { /* the sign-in screen shows */ }
