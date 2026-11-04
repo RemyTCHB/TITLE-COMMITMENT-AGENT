@@ -9,7 +9,7 @@ Layout (integer ids, kept from the first app's database when the data was copied
     documents/{id}                       metadata; the file is in Storage at documents/{id}/{filename}
     feedback/{id}, lessons/{id}, examples/{id}, scores/{auto}
     meta/counters                        the last id handed out per kind
-    presence/{email}                     who's online: sessions {device: {at, type}} (engine only)
+    presence/{email}                     who's online: email, sessions {device: {at, type}} (engine writes, team reads)
     audit/{auto}                         Login As User uses (engine only)
 
 Queries avoid composite indexes (equality filters only, sorting in Python): the team has tens of deals open at a time.

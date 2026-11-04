@@ -46,8 +46,9 @@ sync when a rule changes. (The first Streamlit version and its Neon database wer
   indigo while an engine call runs, red when the reads fail or a call fails, with Retry Now only for calls that are
   safe to repeat (`api.js` SAFE_POST). Active (owner 2026-11-04, as the hub's): who's online, seen in the last five
   minutes, with phone / desktop; phones: photo → Who's Online. The hub writes check-ins from the page; here the page
-  writes nothing, so `web/src/presence.js` checks in every minute through the engine (`POST /v1/presence`, which
-  answers the list; quiet, never on the Live clock); `presence/{email}` is engine-only (no rule lets the page read it).
+  writes nothing, so `web/src/presence.js` checks in every minute through the engine (`POST /v1/presence`; quiet,
+  never on the Live clock) and reads `presence/` live, as the hub (firestore.rules: the team reads, only the engine
+  writes; owner 2026-11-04). If the read is refused, the engine's answer to each check-in is the list.
   Viewing as someone (Login As) checks nobody in; Sign Out marks the device gone.
 - `web/`: Vite + Preact. `src/pages/` one file per screen, `src/data.js` live Firestore reads, `src/api.js` engine
   calls, `src/styles.css` the hub's tokens and components. Copy the hub's look from RemyTCHB/HUB (`app/app.dc.html`),
