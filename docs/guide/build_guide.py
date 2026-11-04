@@ -344,7 +344,7 @@ def cover(c, doc) -> None:
     c.drawString(MARGIN, PAGE_H - 6.85 * inch, doc.guide[1])
     c.setFont("Nunito", 10)
     c.setFillColor(MUTED)
-    c.drawString(MARGIN, PAGE_H - 7.12 * inch, f"Version 2.4 · {date.today():%B %Y} · title.totalchb.com")
+    c.drawString(MARGIN, PAGE_H - 7.12 * inch, f"Version 2.5 · {date.today():%B %Y} · title.totalchb.com")
     c.setFillColor(colors.white)
     c.setFont("Nunito-Bold", 9.5)
     c.drawString(MARGIN, 0.62 * inch, "Total Cash Home Buyers · Internal use only")
@@ -414,7 +414,8 @@ def story(reader: str) -> list:
               "with the date and time in its name; and due dates take a time, as in the Team Hub. "
               "New in 2.3: <b>Help</b> under your photo, with the guide for your role. New in 2.4: Help works as in "
               "the Team Hub: the guide inside the app, the PDFs to open or download, and the Team Hub's delete "
-              "passwords for Team Leaders and Managers.", "good",
+              "passwords for Team Leaders and Managers. New in 2.5: the Team Hub's header, with its clock and "
+              "<b>Active</b> (who's online).", "good",
               "What's new in version 2")]
     s.append(PageBreak())
 
@@ -484,6 +485,11 @@ def story(reader: str) -> list:
         ["ANALYZE", "Upload a new or updated commitment (section 4)."],
         ["TRAINING", "Optional: measure the agent on a commitment your team already worked (section 7)."],
         ["KNOWLEDGE", "What the agent knows: the Feedback Inbox, the team's lessons and the professional checklist."],
+        ["The clock", "Eastern time from the website's own clock, in the colour of the connection: green when "
+                      "everything is saved, indigo while a change is on its way, red when it isn't saved or the "
+                      "page is offline. Click it for the details (and <b>Retry Now</b> when that's safe)."],
+        ["Active", "How many of the team have the app open right now. Click it for who, and whether on a phone or "
+                   "a desktop (anyone seen in the last five minutes). On a phone: your photo → <b>Who's Online</b>."],
         ["Sun / moon", "Light or dark look. Your choice is remembered on that browser."],
         ["Your photo", "Your account and role, <b>Settings</b>, <b>Team</b> (Managers only), <b>Help</b> and "
                        "<b>Sign Out</b>. "

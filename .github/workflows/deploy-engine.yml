@@ -88,6 +88,7 @@ jobs:
           check "no sign-in"        "$(curl -s -o /dev/null -w '%{http_code}' "$URL/v1/me")" 401
           check "forged sign-in"    "$(curl -s -o /dev/null -w '%{http_code}' -H 'Authorization: Bearer forged' "$URL/v1/me")" 401
           check "login as: signed-in owner only" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$URL/v1/login-as")" 401
+          check "who's online: signed-in only" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$URL/v1/presence")" 401
           check "morning run: scheduler only" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$URL/v1/tasks/morning")" 401
           check "no API docs"       "$(curl -s -o /dev/null -w '%{http_code}' "$URL/docs")" 404
           allow() { curl -s -D - -o /dev/null -X OPTIONS -H "Origin: $1" -H 'Access-Control-Request-Method: POST' \

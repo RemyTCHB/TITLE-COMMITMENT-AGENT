@@ -146,6 +146,33 @@ input::placeholder, textarea::placeholder { color: var(--tchb-gray-500); }
 .live-menu p.muted { font-size: 12px; color: var(--text-muted); padding-bottom: 8px; }
 .menu.live-menu .btn { width: calc(100% - 16px); margin: 0 8px; justify-content: center; }
 
+/* Active: who's online (the hub's pill: glass, a pulsing dot, "Active" and the count in a green bubble) */
+.active-pill { display: inline-flex; align-items: center; gap: 8px; height: 40px; flex: none; padding: 0 7px 0 14px;
+  box-sizing: border-box; border-radius: 999px; cursor: pointer; font-family: var(--font-display); font-weight: 700;
+  font-size: 13px; color: var(--tchb-indigo-700); white-space: nowrap; }
+.active-pill:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+.active-pill .dot, .online-row .dot { width: 8px; height: 8px; flex: none; border-radius: 999px; }
+.active-pill .count { min-width: 24px; height: 22px; padding: 0 7px; box-sizing: border-box; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center; background: var(--tchb-green-050);
+  color: var(--tchb-green-600); font-size: 13px; font-variant-numeric: tabular-nums;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tchb-green-500) 25%, transparent); }
+.menu.online-menu { width: 340px; max-width: calc(100vw - 16px); max-height: min(430px, calc(100vh - 16px));
+  box-sizing: border-box; }
+.online-menu .label { padding: 8px 10px 4px; }
+.online-empty { padding: 10px 12px; font-size: 13px; color: var(--text-muted); }
+.online-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; }
+.online-row .avatar.sm { width: 32px; height: 32px; font-size: 12px; border: none; box-shadow: none; cursor: default; }
+.online-row .who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.online-row .who b { font-family: var(--font-display); font-size: 14px; color: var(--text-body); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; text-transform: capitalize; }
+.online-row .who span { font-size: 12px; color: var(--text-muted); }
+.online-row .devs { display: flex; gap: 6px; flex: none; }
+.online-row .dev { display: flex; color: var(--tchb-gray-300); }
+.online-row .dev.on { color: var(--tchb-green-600); }
+.acct-online > span:first-of-type { flex: 1; }
+.acct-online .count { font-size: 12px; color: var(--tchb-green-600); }
+.acct-online { display: none !important; }  /* phones only (below) */
+
 /* Login As User: whose view this is, and the way back */
 .viewing-as { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; padding: 10px 16px;
   background: #b45309; color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 14px; text-align: center;
@@ -478,7 +505,8 @@ textarea.input { resize: vertical; min-height: 84px; }
   .live-clock { font-size: 12px; padding: 0 12px 0 11px; }
   .live-clock .date { display: none; }
   .head-right { display: contents; }
-  .head-right .theme { display: none; }
+  .head-right .theme, .head-right .active-pill { display: none; }
+  .acct-online { display: flex !important; }
   .header-row > .head-right > .avatar { position: absolute; top: 10px; right: 16px; width: 44px; height: 44px; }
   .header.compact .header-row > .head-right > .avatar { top: 6px; }
   .seg.pagetabs { order: 4; flex: 1 1 100%; margin: 0; }
@@ -514,7 +542,7 @@ textarea.input { resize: vertical; min-height: 84px; }
   .modal { padding: 20px; }
   .menu { left: 8px !important; right: 8px !important; top: auto !important; bottom: 8px !important;
     transform: none !important; min-width: 0; }
-  .menu.dp-menu { width: auto; max-width: none; }
+  .menu.dp-menu, .menu.online-menu { width: auto; max-width: none; }
 }
 @media (max-width: 640px) { .seg .lbl { display: none; } }
 @media (max-width: 370px) { .seg.pagetabs button { padding: 0 4px; font-size: 12px; } }

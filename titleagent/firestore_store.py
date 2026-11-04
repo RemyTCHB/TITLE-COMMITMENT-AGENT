@@ -9,6 +9,8 @@ Layout (integer ids, kept from the first app's database when the data was copied
     documents/{id}                       metadata; the file is in Storage at documents/{id}/{filename}
     feedback/{id}, lessons/{id}, examples/{id}, scores/{auto}
     meta/counters                        the last id handed out per kind
+    presence/{email}                     who's online: sessions {device: {at, type}} (engine only)
+    audit/{auto}                         Login As User uses (engine only)
 
 Queries avoid composite indexes (equality filters only, sorting in Python): the team has tens of deals open at a time.
 """
@@ -26,6 +28,8 @@ from titleagent.models import ActionItem, Analysis
 from titleagent.prompts import REVISED_SEED_LESSONS, SEED_LESSONS
 
 BATCH = 400  # Firestore allows 500 writes per batch
+ONLINE_MS = 5 * 60 * 1000  # seen in the last five minutes = online (as the hub)
+PRESENCE_KEEP_MS = 24 * 60 * 60 * 1000
 
 
 class Blobs(Protocol):
@@ -177,6 +181,33 @@ class FirestoreStore:
     def add_audit(self, kind: str, by: str, **detail) -> None:
         """Server-only record (Login As User): no Firestore rule lets the page read audit/."""
         self.db.collection("audit").add({"kind": kind, "by": by, **detail, "at": _now()})
+
+    # ---- who's online (the header's Active pill, as in the Team Hub): each open page checks in through the engine
+    # every minute; a device seen in the last five minutes is online. Times are the engine's clock, in milliseconds.
+    def check_in(self, email: str, device: str, kind: str, out: bool = False) -> None:
+        """presence/{email}: {email, sessions: {device: {at, type}}}. out=True marks the device gone (Sign Out).
+        `device` is a simple field name (engine-checked). A person's devices not seen for a day are dropped."""
+        from google.cloud.firestore import DELETE_FIELD
+
+        ref = self.db.document(f"presence/{email.replace('/', '_')}")
+        now = int(_now().timestamp() * 1000)
+        old = (ref.get().to_dict() or {}).get("sessions") or {}
+        ref.set({"email": email, "sessions": {device: {"at": 0 if out else now, "type": kind}}}, merge=True)
+        stale = {f"sessions.{k}": DELETE_FIELD for k, v in old.items()
+                 if k != device and now - int((v or {}).get("at") or 0) > PRESENCE_KEEP_MS}
+        if stale:
+            ref.update(stale)
+
+    def online(self) -> list[dict]:
+        """Everyone with a device seen in the last five minutes: [{email, mobile, desktop}]."""
+        now, out = int(_now().timestamp() * 1000), []
+        for d in self.db.collection("presence").stream():
+            p = d.to_dict() or {}
+            live = [s for s in (p.get("sessions") or {}).values() if s and now - int(s.get("at") or 0) < ONLINE_MS]
+            if live and p.get("email"):
+                out.append({"email": p["email"], "mobile": any(s.get("type") == "Mobile" for s in live),
+                            "desktop": any(s.get("type") != "Mobile" for s in live)})
+        return sorted(out, key=lambda x: x["email"])
 
     def set_setting(self, key: str, value, by: str = "") -> None:
         self.db.document(f"settings/{key}").set({"value": value, "updated_at": _now(), "updated_by": by})

@@ -17,6 +17,7 @@ import { Settings } from './pages/Settings.jsx';
 import { Team } from './pages/Team.jsx';
 import { HelpPanel } from './pages/Help.jsx';
 import { watchConnection } from './data.js';
+import { startPresence } from './presence.js';
 import { Training } from './pages/Training.jsx';
 
 function Gate({ error, busy, onSignIn }) {
@@ -78,6 +79,7 @@ function App() {
   const [page, arg, sub] = route;
   useEffect(() => { if (page === 'help') { setHelp(true); go(''); } }, [page]);  // old #/help links open the panel
   useEffect(() => (user ? watchConnection() : undefined), [user]);  // the Live clock's connection state
+  useEffect(() => (user ? startPresence() : undefined), [user?.uid]);  // who's online (the Active pill)
   return (
     <ToastHost>
       <canvas ref={bg} class="aurora" aria-hidden="true" />

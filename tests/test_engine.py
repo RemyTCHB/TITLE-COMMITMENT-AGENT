@@ -339,3 +339,34 @@ def test_login_as_user_is_for_the_owner_only_and_signs_changes_via_them():
                                        verify=lambda t: tokens[t], accounts=FakeAccounts())))
     assert off.get("/v1/me", headers=h("owner")).json()["login_as"] is False
     assert off.post("/v1/login-as", json={"email": "pat.tc@totalchb.com"}, headers=h("owner")).status_code == 403
+
+
+def test_who_is_online_checks_in_through_the_engine():
+    from tests.conftest import firestore_store
+
+    store = firestore_store()
+    for d in store.db.collection("presence").stream():
+        d.reference.delete()
+    tokens = {**TOKENS, "as-tc": {"email": "pat.tc@totalchb.com", "email_verified": True, "uid": "u-tc",
+                                  "imp": "owner@totalchb.com"}}
+    client = TestClient(create_app(Engine(secrets=Secrets(None, None, None), store=store, llm=demo.scripted_llm,
+                                          verify=lambda t: tokens[t])))
+    assert client.post("/v1/presence", json={"device": "dphone1"}).status_code == 401
+    assert client.post("/v1/presence", json={"device": "bad id"}, headers=h("tc")).status_code == 422
+    r = client.post("/v1/presence", json={"device": "dphone1", "type": "Mobile"}, headers=h("tc"))
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
+    assert r.json()["online"] == [{"email": "pat.tc@totalchb.com", "mobile": True, "desktop": False}]
+    r = client.post("/v1/presence", json={"device": "ddesk1"}, headers=h("owner"))
+    assert r.json()["online"] == [{"email": "owner@totalchb.com", "mobile": False, "desktop": True},
+                                  {"email": "pat.tc@totalchb.com", "mobile": True, "desktop": False}]
+    # viewing as someone (Login As) checks nobody in; Sign Out marks the device gone
+    store.db.document("presence/owner@totalchb.com").delete()
+    on = client.post("/v1/presence", json={"device": "ddesk1"}, headers=h("as-tc")).json()["online"]
+    assert [p["email"] for p in on] == ["pat.tc@totalchb.com"]
+    on = client.post("/v1/presence", json={"device": "dphone1", "out": True}, headers=h("tc")).json()["online"]
+    assert on == []
+    # a device not seen for a day is dropped from the record
+    store.db.document("presence/pat.tc@totalchb.com").set({"sessions": {"dold1": {"at": 1, "type": "Desktop"}}},
+                                                           merge=True)
+    client.post("/v1/presence", json={"device": "dphone1", "type": "Mobile"}, headers=h("tc"))
+    assert set(store.db.document("presence/pat.tc@totalchb.com").get().to_dict()["sessions"]) == {"dphone1"}

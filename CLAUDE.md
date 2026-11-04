@@ -40,11 +40,15 @@ sync when a rule changes. (The first Streamlit version and its Neon database wer
 - `engine/main.py`: the Cloud Run service (FastAPI) around `flows.py`. Packages: `engine/requirements.txt`
   (`uv export --no-dev --no-hashes --no-emit-project --format requirements-txt -o engine/requirements.txt`).
 - Header (owner 2026-11-04): the hub's header standard (RemyTCHB/HUB `docs/HEADER.md`), `web/src/header.jsx`:
-  logo + Live clock, the page tabs in the middle, light / dark + photo; pinned, slims on scroll; centred page titles;
+  logo + Live clock, the page tabs in the middle, Active, light / dark + photo; pinned, slims on scroll; centred page titles;
   1280px content. The Live clock (`web/src/status.js`): the time from the website's own `Date` header (as the hub:
   HEAD on load, every 15 minutes and on return; never the device clock); green while the live reads are connected,
   indigo while an engine call runs, red when the reads fail or a call fails, with Retry Now only for calls that are
-  safe to repeat (`api.js` SAFE_POST). No "who's online" (it would need a new collection and rules change).
+  safe to repeat (`api.js` SAFE_POST). Active (owner 2026-11-04, as the hub's): who's online, seen in the last five
+  minutes, with phone / desktop; phones: photo → Who's Online. The hub writes check-ins from the page; here the page
+  writes nothing, so `web/src/presence.js` checks in every minute through the engine (`POST /v1/presence`, which
+  answers the list; quiet, never on the Live clock); `presence/{email}` is engine-only (no rule lets the page read it).
+  Viewing as someone (Login As) checks nobody in; Sign Out marks the device gone.
 - `web/`: Vite + Preact. `src/pages/` one file per screen, `src/data.js` live Firestore reads, `src/api.js` engine
   calls, `src/styles.css` the hub's tokens and components. Copy the hub's look from RemyTCHB/HUB (`app/app.dc.html`),
   e.g. the due date picker (`ui.jsx` DatePicker: the day, and for item due dates an hour and minute in Eastern time, saved as `due_time` "HH:MM"; the closing date is the day only) and Team Members (`pages/Team.jsx`).

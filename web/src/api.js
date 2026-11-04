@@ -72,6 +72,7 @@ export const api = {
   helpPasswords: () => call('GET', '/v1/help/passwords'),
   loginAs: email => call('POST', '/v1/login-as', { email }),
   loginBack: () => call('POST', '/v1/login-as/back'),
+  presence: body => send('POST', '/v1/presence', body),  // quiet: not shown on the Live clock (presence.js)
 
   async download(dealId, format, include) {
     const res = await call('GET', `/v1/deals/${dealId}/export?format=${format}&include=${include}`, null, { raw: true });

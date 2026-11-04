@@ -172,6 +172,11 @@ class ItemPatch(BaseModel):
 class LoginAsIn(BaseModel):
     email: str = Field(min_length=3, max_length=120)
 
+class PresenceIn(BaseModel):
+    device: str = Field(pattern=r"^d[a-z0-9]{4,40}$")  # this browser's id (localStorage), a plain field name
+    type: Literal["Mobile", "Desktop"] = "Desktop"
+    out: bool = False  # Sign Out: this device is gone
+
 class TeamPerson(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     email: str = Field(min_length=3, max_length=120)
@@ -328,6 +333,14 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         owner = e.secrets.login_as_owner
         return {"email": u.email, "admin": u.admin, "role": u.role, "can": u.can, "imp": u.imp,
                 "login_as": bool(owner and u.email == owner and not u.imp and e.accounts)}
+
+    @app.post("/v1/presence")
+    def presence(body: PresenceIn, u: User = Depends(user), e: Engine = Depends(eng)):
+        """Who's online (the header's Active pill, as in the Team Hub): the page checks in every minute and gets back
+        everyone seen in the last five minutes. While the owner views as someone (Login As), nothing is checked in."""
+        if not u.imp:
+            e.store.check_in(u.email, body.device, body.type, out=body.out)
+        return JSONResponse({"online": e.store.online()}, headers={"Cache-Control": "no-store"})
 
     # ---- Login As User (owner 2026-11-04, as in the hub): the owner signs in as a team member to see their view
     @app.post("/v1/login-as")

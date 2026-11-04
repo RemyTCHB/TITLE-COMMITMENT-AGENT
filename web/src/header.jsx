@@ -1,11 +1,12 @@
 // The header, to the Universal Team Hub's standard (RemyTCHB/HUB docs/HEADER.md):
-// left the logo and the Live clock, middle the page tabs (one company, so no company switch), right light / dark and
-// the photo. Pinned; only its padding slims once the page scrolls. Phones: row 1 logo, clock (time only), photo;
-// row 2 the tabs; light / dark moves into the photo menu.
-import { useEffect, useState } from 'preact/hooks';
+// left the logo and the Live clock, middle the page tabs (one company, so no company switch), right Active, light /
+// dark and the photo. Pinned; only its padding slims once the page scrolls. Phones: row 1 logo, clock (time only),
+// photo; row 2 the tabs; Active and light / dark move into the photo menu (Who's Online).
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { useSettings } from './data.js';
 import { api } from './api.js';
 import { signIn, signInWithToken, signOutNow } from './firebase.js';
+import { presenceOut, useOnline } from './presence.js';
 import { go } from './router.js';
 import { clearFailure, eastern, liveState, now, useStatus } from './status.js';
 import { useTheme } from './theme.js';
@@ -58,6 +59,39 @@ function LiveClock() {
   );
 }
 
+// Who's online (presence.js): the Active pill, and its Online Now list (name, Manager or department, phone / desktop).
+const PHONE = 'M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2ZM12 18h.01';
+const DESK = 'M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM8 21h8M12 17v4';
+const Device = ({ on, d, what }) => (
+  <span class={`dev ${on ? 'on' : ''}`} title={what} aria-label={`${on ? 'On' : 'Not on'} a ${what.toLowerCase()}`}>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+      stroke-linecap="round" stroke-linejoin="round"><path d={d} /></svg></span>);
+
+function OnlineNow({ menu, user, online }) {
+  const s = useSettings();
+  const team = s?.team || [];
+  const me = (user.email || '').toLowerCase();
+  const rows = (online || []).map(p => {
+    const t = team.find(x => x.email === p.email);
+    const name = t?.name || p.email.split('@')[0].replace(/[._]/g, ' ');
+    return { ...p, name, photo: t?.photo || '',
+      sub: [t?.role === 'manager' ? 'Manager' : t?.dept, p.email === me ? 'You' : ''].filter(Boolean).join(' · ') || 'Team' };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    <Menu menu={menu} label="Online now" cls="online-menu" keepOpen>
+      <div class="label">Online Now · {rows.length}</div>
+      {!rows.length && <div class="online-empty">No One Else Is Online</div>}
+      {rows.map(p => (
+        <div class="online-row" key={p.email}>
+          <span class="dot live" />
+          <span class="avatar sm">{initials(p.name)}{p.photo && <img src={p.photo} alt="" width="32" height="32" />}</span>
+          <span class="who"><b>{p.name}</b><span>{p.sub}</span></span>
+          <span class="devs"><Device on={p.mobile} d={PHONE} what="Phone" /><Device on={p.desktop} d={DESK} what="Desktop" /></span>
+        </div>))}
+    </Menu>
+  );
+}
+
 function Photo({ person, user, size = 40 }) {
   return (
     <>
@@ -73,8 +107,9 @@ const themeOptions = words => [
 
 // The photo and its menu: you, then My Settings, Team Members (managers), Help, Sign Out. Only once signed in, so the
 // team (for your name, photo and department) loads with your sign-in.
-function Account({ user, me, onHelp, theme, setTheme }) {
+function Account({ user, me, onHelp, theme, setTheme, online, onOnline }) {
   const menu = useMenu();
+  const photo = useRef(null);
   const s = useSettings();
   const [leaving, setLeaving] = useState(false);
   const person = (s?.team || []).find(p => p.email === (user.email || '').toLowerCase());
@@ -83,7 +118,7 @@ function Account({ user, me, onHelp, theme, setTheme }) {
   const open = fn => () => { menu.close(); fn(); };
   return (
     <>
-      <button class="avatar" title={`Signed in as ${user.email}`} aria-haspopup="true" aria-label="Your account"
+      <button class="avatar" ref={photo} title={`Signed in as ${user.email}`} aria-haspopup="true" aria-label="Your account"
         onClick={menu.open}><Photo person={person} user={user} /></button>
       <Menu menu={menu} label="Account" cls="acct-menu">
         <div class="acct-you">
@@ -98,6 +133,9 @@ function Account({ user, me, onHelp, theme, setTheme }) {
         <div class="acct-theme" onClick={e => e.stopPropagation()}>
           <Seg cls="dark-on" label="Theme" value={theme} onChange={setTheme} options={themeOptions(true)} />
         </div>
+        {online && (  /* phones: the Active pill lives here */
+          <button class="acct-online" onClick={open(() => onOnline(photo.current))}><Icon name="online" />
+            <span>Who's Online</span><span class="count">{online.length}</span></button>)}
         <button onClick={open(() => go('settings'))}><Icon name="settings" /> My Settings</button>
         {me?.admin && <button onClick={open(() => go('team'))}><Icon name="users" /> Team Members</button>}
         <button onClick={open(onHelp)}><Icon name="help" /> Help</button>
@@ -108,7 +146,7 @@ function Account({ user, me, onHelp, theme, setTheme }) {
           <p class="lede" style="font-size:15px">Sign out of the Title Commitment Agent on this device?</p>
           <div class="actions">
             <button class="btn ghost pill" onClick={() => setLeaving(false)}>Cancel</button>
-            <button class="btn primary pill" onClick={() => { setLeaving(false); signOutNow(); }}>Sign Out</button>
+            <button class="btn primary pill" onClick={() => { setLeaving(false); (me?.imp ? Promise.resolve() : presenceOut()).finally(signOutNow); }}>Sign Out</button>
           </div>
         </Modal>)}
     </>
@@ -141,6 +179,9 @@ function ViewingAs({ user, me }) {
 
 export function Header({ user, me, page, onHelp, compact, headRef }) {
   const [theme, setTheme] = useTheme();
+  const online = useOnline();
+  const active = useMenu();
+  const openOnline = el => active.open({ currentTarget: el });
   return (
     <header class={`header ${compact ? 'compact' : ''}`} ref={headRef}>
       <div class="header-row">
@@ -156,11 +197,17 @@ export function Header({ user, me, page, onHelp, compact, headRef }) {
           <Seg cls="pagetabs dark-on" label="Pages" value={page === 'deal' ? 'deals' : page}
             onChange={v => go(v === 'deals' ? '' : v)} options={TABS} />)}
         <div class="head-right">
+          {user && online && (
+            <button type="button" class="active-pill glass" onClick={active.open} title="Who's online now"
+              aria-haspopup="true" aria-label={`Active: ${online.length} online now`}>
+              <span class="dot live" /><span>Active</span><span class="count">{online.length}</span></button>)}
           <Seg cls="glass dark-on theme" label="Theme" value={theme} onChange={setTheme} options={themeOptions(false)} />
-          {user && <Account user={user} me={me} onHelp={onHelp} theme={theme} setTheme={setTheme} />}
+          {user && <Account user={user} me={me} onHelp={onHelp} theme={theme} setTheme={setTheme} online={online}
+            onOnline={openOnline} />}
         </div>
       </div>
       {user && me?.imp && <ViewingAs user={user} me={me} />}
+      {user && <OnlineNow menu={active} user={user} online={online} />}
     </header>
   );
 }
