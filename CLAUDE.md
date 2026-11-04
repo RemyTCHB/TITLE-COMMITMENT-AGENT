@@ -39,6 +39,12 @@ sync when a rule changes. (The first Streamlit version and its Neon database wer
   `storage.py` (`open_store()`), `exports/` (incl. `google_export.gs`), `emailer.py`, `training.py`, `demo.py`.
 - `engine/main.py`: the Cloud Run service (FastAPI) around `flows.py`. Packages: `engine/requirements.txt`
   (`uv export --no-dev --no-hashes --no-emit-project --format requirements-txt -o engine/requirements.txt`).
+- Header (owner 2026-11-04): the hub's header standard (RemyTCHB/HUB `docs/HEADER.md`), `web/src/header.jsx`:
+  logo + Live clock, the page tabs in the middle, light / dark + photo; pinned, slims on scroll; centred page titles;
+  1280px content. The Live clock (`web/src/status.js`): the time from the website's own `Date` header (as the hub:
+  HEAD on load, every 15 minutes and on return; never the device clock); green while the live reads are connected,
+  indigo while an engine call runs, red when the reads fail or a call fails, with Retry Now only for calls that are
+  safe to repeat (`api.js` SAFE_POST). No "who's online" (it would need a new collection and rules change).
 - `web/`: Vite + Preact. `src/pages/` one file per screen, `src/data.js` live Firestore reads, `src/api.js` engine
   calls, `src/styles.css` the hub's tokens and components. Copy the hub's look from RemyTCHB/HUB (`app/app.dc.html`),
   e.g. the due date picker (`ui.jsx` DatePicker: the day, and for item due dates an hour and minute in Eastern time, saved as `due_time` "HH:MM"; the closing date is the day only) and Team Members (`pages/Team.jsx`).

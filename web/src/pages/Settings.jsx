@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { api } from '../api.js';
 import { useReference, useSettings } from '../data.js';
-import { Icon, Spinner, useToast } from '../ui.jsx';
+import { Icon, PageTitle, Spinner, useToast } from '../ui.jsx';
 import { Avatar } from './Team.jsx';
 import { HelpCard } from './Help.jsx';
 
@@ -76,13 +76,7 @@ export function Settings({ me, onHelp }) {
   const google = ref?.connections?.google;
   return (
     <>
-      <section class="hero">
-        <div class="hero-text">
-          <div class="eyebrow-row"><span class="eyebrow">{admin ? 'Managers Change Settings' : 'Read Only: Managers Change Settings'}</span></div>
-          <h1 class="title">Settings</h1>
-          <p class="lede">Who May Do What, The Daily Email, Due Dates And The Google Folder.</p>
-        </div>
-      </section>
+      <PageTitle note={admin ? null : 'Read Only: Managers Change Settings'}>Settings</PageTitle>
 
       <HelpCard me={me} onOpen={onHelp} />
 

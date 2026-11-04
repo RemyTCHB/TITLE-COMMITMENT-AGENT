@@ -5,6 +5,7 @@ import { getBytes, ref } from 'firebase/storage';
 import { useEffect, useState } from 'preact/hooks';
 import { api } from './api.js';
 import { db, storage } from './firebase.js';
+import { readsAre, readsFromCache } from './status.js';
 
 export const PRIORITY = { blocker: 'Closing Blocker', before: 'Before Closing', fyi: 'Review / FYI' };
 export const PRIORITY_ORDER = ['blocker', 'before', 'fyi'];
@@ -90,4 +91,10 @@ export function useReference() {
       .then(r => { referenceCache = r; setRef(r); }).catch(() => {});
   }, []);
   return ref;
+}
+
+// The Live clock's connection state: one listener on the settings, from the server or not.
+export function watchConnection() {
+  return onSnapshot(collection(db, 'settings'), { includeMetadataChanges: true },
+    snap => readsFromCache(snap.metadata.fromCache), () => readsAre('error'));
 }

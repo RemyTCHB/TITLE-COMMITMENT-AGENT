@@ -7,7 +7,7 @@ import { api, jobId } from '../api.js';
 import { useDeals, useJob, useReference, useSettings } from '../data.js';
 import { db } from '../firebase.js';
 import { go } from '../router.js';
-import { DatePicker, Icon, Spinner, fmtDate, useMenu, useToast } from '../ui.jsx';
+import { DatePicker, Icon, PageTitle, Spinner, fmtDate, useMenu, useToast } from '../ui.jsx';
 
 const DRAFT_KEY = 'ta-draft';  // the draft survives a refresh (this tab only)
 const MAX_MB = 50;
@@ -165,13 +165,7 @@ export function Analyze({ arg, sub }) {
   const keep = d => { setDraft(d); try { d ? sessionStorage.setItem(DRAFT_KEY, d.draft_id) : sessionStorage.removeItem(DRAFT_KEY); } catch { /* */ } };
   return (
     <>
-      <section class="hero">
-        <div class="hero-text">
-          <div class="eyebrow-row"><span class="eyebrow">{updateFor ? 'Updated Commitment' : 'New Commitment'}</span></div>
-          <h1 class="title">Analyze A <span class="accent">Commitment</span></h1>
-          <p class="lede">Upload The Commitment. The Agent Lists Everything That Has To Happen Before This Deal Can Close.</p>
-        </div>
-      </section>
+      <PageTitle>Analyze A <span class="accent">Commitment</span></PageTitle>
       {draft ? <Confirm draft={draft} onStartOver={() => keep(null)} onDone={id => { keep(null); go(`deal/${id}`); }} />
         : <Upload updateFor={updateFor} onRead={keep} />}
     </>

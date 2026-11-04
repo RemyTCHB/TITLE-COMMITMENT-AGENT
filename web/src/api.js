@@ -2,10 +2,30 @@
 import { ref, uploadBytes } from 'firebase/storage';
 import { ENGINE_URL } from './config.js';
 import { auth, storage } from './firebase.js';
+import { callDone, callStarted } from './status.js';
 
 export class ApiError extends Error {}
 
-async function call(method, path, body, { raw = false } = {}) {
+// Repeating these is safe (Retry Now on the Live clock): reads, settings and item changes, and the jobs that carry a job
+// id (re-run, review, training) or make an export. Others (Report Missing Item, feedback, a new lesson) would be done
+// twice, so the clock asks the person to do them again instead.
+const SAFE_POST = /\/(rerun|review|training|google|google\/check)$/;
+
+async function call(method, path, body, opts = {}) {
+  callStarted();
+  try {
+    const res = await send(method, path, body, opts);
+    callDone(true, { write: method !== 'GET' });
+    return res;
+  } catch (e) {
+    const safe = method === 'GET' || method === 'PUT' || method === 'PATCH' || SAFE_POST.test(path);
+    callDone(false, { failure: { message: e.message, refused: !!e.refused,
+      retry: !e.refused && safe ? () => call(method, path, body, opts).catch(() => {}) : null } });
+    throw e;
+  }
+}
+
+async function send(method, path, body, { raw = false } = {}) {
   const user = auth.currentUser;
   if (!user) throw new ApiError('Sign in first.');
   const token = await user.getIdToken();
@@ -22,7 +42,9 @@ async function call(method, path, body, { raw = false } = {}) {
   if (!res.ok) {
     let detail = '';
     try { detail = (await res.json()).detail; } catch { /* not JSON */ }
-    throw new ApiError(typeof detail === 'string' && detail ? detail : `Something went wrong (${res.status}).`);
+    const err = new ApiError(typeof detail === 'string' && detail ? detail : `Something went wrong (${res.status}).`);
+    err.refused = res.status < 500;  // the engine said no (permissions, a bad value): trying again won't help
+    throw err;
   }
   return raw ? res : res.json();
 }

@@ -7,7 +7,7 @@ import { api, jobId } from '../api.js';
 import { DONE, PRIORITY, PRIORITY_ORDER, STATUSES, isOpen, useDeal, useItems, useJob, useLatestRun } from '../data.js';
 import { db, storage } from '../firebase.js';
 import { go } from '../router.js';
-import { DatePicker, Icon, Menu, Modal, Seg, Spinner, daysUntil, fmtDate, money, timeText, useMenu, useToast, when } from '../ui.jsx';
+import { Bar, DatePicker, Icon, Menu, Modal, Ring, Seg, Spinner, Stat, daysUntil, fmtDate, money, timeText, useMenu, useToast, when } from '../ui.jsx';
 
 const STATUS_CLS = { Open: 's-open', Ordered: 's-ordered', Received: 's-received', Cleared: 's-cleared', Waived: 's-waived' };
 const PROOF = { true: '✓', false: '✗' };
@@ -341,13 +341,15 @@ export function Deal({ id, me }) {
           <p class="lede">{[deal.tc && `TC ${deal.tc}`, deal.title_company, a.commitment_number && `Commitment ${a.commitment_number}`]
             .filter(Boolean).join(' · ')}</p>
         </div>
-        <div class="stats">
-          <div class="stat"><b class={openBlockers ? 'red' : 'green'}>{openBlockers}</b><span>Open Blockers</span></div>
-          <div class="stat"><b>{cleared}<span class="slash">/</span>{live.length}</b><span>Items Cleared</span></div>
-          {covPct !== null && <div class="stat"><b class={covGaps.length ? 'red' : 'green'}>{covPct}%</b><span>Coverage</span></div>}
-        </div>
       </section>
-      <div class="progress" aria-hidden="true"><i style={{ width: `${live.length ? (100 * cleared) / live.length : 0}%` }} /></div>
+      <div class="deal-line">
+        {live.length > 0 && <Ring pct={Math.round((100 * cleared) / live.length)} />}
+        {live.length > 0 && <Bar done={cleared} total={live.length} what="Items Cleared" />}
+        <div class="line-stats">
+          <Stat value={openBlockers} label="Open Blockers" cls={openBlockers ? 'red' : 'green'} />
+          {covPct !== null && <Stat value={`${covPct}%`} label="Coverage" cls={covGaps.length ? 'red' : 'green'} />}
+        </div>
+      </div>
 
       {expires && <div class="note red" role="alert"><b>The commitment expires before closing</b> ({fmtDate(expires)}).
         Ask the title company for an updated commitment now.</div>}

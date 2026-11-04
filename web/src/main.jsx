@@ -6,8 +6,9 @@ import { api } from './api.js';
 import { startAurora } from './aurora.js';
 import { auth, signIn, signOutNow, teamAccount } from './firebase.js';
 import { go, useRoute } from './router.js';
-import { useTheme } from './theme.js';
-import { Icon, Menu, Seg, Spinner, ToastHost, initials, useMenu } from './ui.jsx';
+import { Header } from './header.jsx';
+import { syncClock } from './status.js';
+import { Spinner, ToastHost, updateFades } from './ui.jsx';
 import { Deal } from './pages/Deal.jsx';
 import { Deals } from './pages/Deals.jsx';
 import { Analyze } from './pages/Analyze.jsx';
@@ -15,57 +16,8 @@ import { Knowledge } from './pages/Knowledge.jsx';
 import { Settings } from './pages/Settings.jsx';
 import { Team } from './pages/Team.jsx';
 import { HelpPanel } from './pages/Help.jsx';
-import { useSettings } from './data.js';
+import { watchConnection } from './data.js';
 import { Training } from './pages/Training.jsx';
-
-const TABS = [
-  { value: 'deals', label: 'Deals' }, { value: 'analyze', label: 'Analyze' },
-  { value: 'training', label: 'Training' }, { value: 'knowledge', label: 'Knowledge' },
-];
-
-// Your photo from the Team tab, or your initials.
-function MyAvatar({ user, onClick }) {
-  const s = useSettings();
-  const mine = (s?.team || []).find(p => p.email === (user.email || '').toLowerCase());
-  return (
-    <button class="avatar" title={user.email} aria-label={`Signed in as ${user.email}`} onClick={onClick}>
-      {initials(mine?.name || user.displayName || user.email)}
-      {mine?.photo && <img src={mine.photo} alt="" />}
-    </button>
-  );
-}
-
-function Header({ user, me, page, onHelp }) {
-  const [theme, setTheme] = useTheme();
-  const menu = useMenu();
-  return (
-    <header class="header">
-      <div class="header-row">
-        <a class="logo" href="#/" aria-label="Title Commitment Agent home">
-          <img src={theme === 'dark' ? '/logo-full-white.png' : '/logo-full.png'} alt="Total Cash Home Buyers" />
-        </a>
-        <Seg cls="glass dark-on" label="Theme" value={theme} onChange={setTheme} options={[
-          { value: 'light', icon: 'sun', title: 'Light theme' },
-          { value: 'dark', icon: 'moon', title: 'Dark theme' }]} />
-        {user && (
-          <>
-            <Seg cls="caps dark-on tabs" label="Pages" value={page === 'deal' ? 'deals' : page}
-              onChange={v => go(v === 'deals' ? '' : v)} options={TABS} />
-            <MyAvatar user={user} onClick={menu.open} />
-            <Menu menu={menu} label="Account">
-              <div class="label">{user.email}{me?.admin ? ' · manager' : me?.role === 'lead' ? ' · team leader' : ''}</div>
-              <button onClick={() => go('settings')}><Icon name="settings" /> Settings</button>
-              {me?.admin && <button onClick={() => go('team')}><Icon name="users" /> Team</button>}
-              <button onClick={onHelp}><Icon name="help" /> Help</button>
-              <hr />
-              <button onClick={signOutNow}><Icon name="out" /> Sign Out</button>
-            </Menu>
-          </>
-        )}
-      </div>
-    </header>
-  );
-}
 
 function Gate({ error, busy, onSignIn }) {
   return (
@@ -87,9 +39,30 @@ function App() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [help, setHelp] = useState(false);  // the Help panel, as in the hub
+  const [compact, setCompact] = useState(false);  // the header slims once the page scrolls
   const route = useRoute();
-  const bg = useRef(null);
+  const bg = useRef(null), head = useRef(null);
   useEffect(() => startAurora(bg.current), []);
+  useEffect(() => {  // the server-synced clock: now, every 15 minutes and when the tab comes back (as in the hub)
+    syncClock();
+    const i = setInterval(syncClock, 15 * 60 * 1000);
+    const vis = () => !document.hidden && syncClock();
+    document.addEventListener('visibilitychange', vis);
+    return () => { clearInterval(i); document.removeEventListener('visibilitychange', vis); };
+  }, []);
+  useEffect(() => {  // slim past 120px, full again within 40px of the top; the header's height for what pins under it
+    const onScroll = () => setCompact(c => (c ? window.scrollY > 40 : window.scrollY > 120));
+    window.addEventListener('scroll', onScroll, { passive: true });
+    const ro = new ResizeObserver(() => document.documentElement.style.setProperty('--head-h',
+      `${Math.round(head.current?.getBoundingClientRect().height || 0)}px`));
+    if (head.current) ro.observe(head.current);
+    const fades = () => updateFades();
+    window.addEventListener('resize', fades);
+    document.addEventListener('scroll', fades, { capture: true, passive: true });
+    return () => { window.removeEventListener('scroll', onScroll); ro.disconnect(); window.removeEventListener('resize', fades);
+      document.removeEventListener('scroll', fades, { capture: true }); };
+  }, []);
+  useEffect(() => { updateFades(); });
   useEffect(() => onAuthStateChanged(auth, u => {
     if (u && !teamAccount(u)) { signOutNow(); setError(`${u.email} doesn't have access. Use your @totalchb.com account.`); setUser(null); return; }
     setUser(u || null);
@@ -104,10 +77,11 @@ function App() {
   };
   const [page, arg, sub] = route;
   useEffect(() => { if (page === 'help') { setHelp(true); go(''); } }, [page]);  // old #/help links open the panel
+  useEffect(() => (user ? watchConnection() : undefined), [user]);  // the Live clock's connection state
   return (
     <ToastHost>
       <canvas ref={bg} class="aurora" aria-hidden="true" />
-      <Header user={user} me={me} page={page} onHelp={() => setHelp(true)} />
+      <Header user={user} me={me} page={page} onHelp={() => setHelp(true)} compact={compact} headRef={head} />
       <main class="main">
         {user === undefined ? <p class="lede" style="text-align:center"><Spinner /></p>
           : !user ? <Gate error={error} busy={busy} onSignIn={doSignIn} />

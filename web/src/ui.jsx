@@ -1,5 +1,6 @@
 // Shared pieces in the Universal Team Hub's design: icons, header, pill groups, menus, dialogs, notices.
 import { createContext } from 'preact';
+import { createPortal } from 'preact/compat';
 import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 
 // ---------------------------------------------------------------- icons (the hub's line icons)
@@ -52,6 +53,66 @@ export function Seg({ options, value, onChange, label, cls = '' }) {
   );
 }
 
+// Rows that scroll sideways fade over 28px at whichever edge has more to show (the hub's header standard, section 2).
+export function updateFades() {
+  document.querySelectorAll('.seg, .fade-x').forEach(el => {
+    const more = el.scrollWidth > el.clientWidth + 1;
+    const f = !more ? '' : `${el.scrollLeft > 2 ? 'l' : ''}${el.scrollLeft + el.clientWidth < el.scrollWidth - 2 ? 'r' : ''}`;
+    if ((el.dataset.fade || '') !== f) el.dataset.fade = f;
+  });
+}
+
+// A page's title: centred, no eyebrow or lede (a note only where it says something the person must know).
+export function PageTitle({ children, note }) {
+  return (
+    <section class="page-title">
+      <h1 class="title">{children}</h1>
+      {note && <p class="title-note">{note}</p>}
+    </section>
+  );
+}
+
+// The tabs line: pins under the header while scrolling, with a glass card behind it once pinned.
+export function PinLine({ children, cls = '' }) {
+  const box = useRef(null);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const check = () => {
+      const el = box.current; if (!el) return;
+      const top = parseFloat(getComputedStyle(el).top) || 0;
+      setStuck(window.scrollY > 0 && el.getBoundingClientRect().top <= top + 1);
+    };
+    check();
+    window.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
+    return () => { window.removeEventListener('scroll', check); window.removeEventListener('resize', check); };
+  }, []);
+  return <div ref={box} class={`pin-line ${stuck ? 'stuck' : ''} ${cls}`}>{children}</div>;
+}
+
+// The standard's ring and bar (TC Checklist's look): red while in progress, green at 100%.
+export function Ring({ pct, cls = '' }) {
+  return (
+    <span class={`ring ${pct >= 100 ? 'full' : ''} ${cls}`} style={{ '--p': `${pct}%` }} aria-hidden="true">
+      <b>{pct}%</b>
+    </span>
+  );
+}
+
+export function Bar({ done, total, what }) {
+  const pct = total ? (100 * done) / total : 0;
+  return (
+    <span class="bar-block">
+      <span class={`bar ${pct >= 100 ? 'full' : ''}`}><i style={{ width: `${pct}%` }} /></span>
+      <span class="bar-n">{done} of {total} {what}</span>
+    </span>
+  );
+}
+
+export function Stat({ value, label, cls = '' }) {
+  return <span class="lstat"><b class={cls}>{value}</b><span>{label}</span></span>;
+}
+
 // ---------------------------------------------------------------- menus anchored to a button
 export function useMenu() {
   const [at, setAt] = useState(null);
@@ -78,13 +139,12 @@ export function Menu({ menu, children, label, cls = '', keepOpen = false }) {
     return () => document.removeEventListener('keydown', key);
   }, [menu.at]);
   if (!menu.at) return null;
-  return (
+  return createPortal(  // on the page body, above the pinned header
     <>
       <div class="scrim" onClick={menu.close} />
       <div class={`menu ${cls}`} ref={box} role={keepOpen ? 'dialog' : 'menu'} aria-label={label} style={menu.at}
         onClick={keepOpen ? undefined : menu.close}>{children}</div>
-    </>
-  );
+    </>, document.body);
 }
 
 // ---------------------------------------------------------------- the hub's due date picker
@@ -168,14 +228,13 @@ export function Modal({ title, children, onClose, wide }) {
     document.addEventListener('keydown', key);
     return () => document.removeEventListener('keydown', key);
   }, [onClose]);
-  return (
+  return createPortal(  // on the page body, above the pinned header
     <div class="modal-scrim" onClick={e => e.target === e.currentTarget && onClose()}>
       <div class="modal" role="dialog" aria-modal="true" aria-label={title} style={wide ? 'max-width:760px' : ''}>
         <h2>{title}</h2>
         {children}
       </div>
-    </div>
-  );
+    </div>, document.body);
 }
 
 // ---------------------------------------------------------------- toasts

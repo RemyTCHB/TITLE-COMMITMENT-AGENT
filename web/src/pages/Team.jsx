@@ -5,7 +5,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { api } from '../api.js';
 import { useSettings } from '../data.js';
-import { Icon, Menu, Spinner, initials, useMenu, useToast } from '../ui.jsx';
+import { Icon, Menu, PageTitle, Spinner, Stat, initials, useMenu, useToast } from '../ui.jsx';
 
 const ROLE = { manager: 'Manager', lead: 'Team Leader', member: 'Member' };
 // The same team? (Firestore hands fields back in its own order, so compare the values.)
@@ -118,17 +118,11 @@ export function Team({ me }) {
     ['No Department', draft.filter(p => p.role !== 'manager' && p.dept !== 'TC').sort(by)]].filter(([, rows]) => rows.length);
   return (
     <>
-      <section class="hero">
-        <div class="hero-text">
-          <div class="eyebrow-row"><span class="eyebrow">Managers Only</span></div>
-          <h1 class="title">The <span class="accent">Team</span></h1>
-          <p class="lede">Managers Approve Lessons And Change Settings. Everyone In TC Can Own A Deal.</p>
-        </div>
-        <div class="stats">
-          <div class="stat"><b>{draft.filter(p => p.role === 'manager').length}</b><span>Managers</span></div>
-          <div class="stat"><b>{draft.filter(p => p.dept === 'TC').length}</b><span>In TC</span></div>
-        </div>
-      </section>
+      <PageTitle>The <span class="accent">Team</span></PageTitle>
+      <div class="line-stats center">
+        <Stat value={draft.filter(p => p.role === 'manager').length} label="Managers" />
+        <Stat value={draft.filter(p => p.dept === 'TC').length} label="In TC" />
+      </div>
 
       {!saved && <div class="note">No team saved yet. Add the Managers and the TC department below, then Save Changes.</div>}
 

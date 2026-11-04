@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { api, jobId } from '../api.js';
 import { PRIORITY, useReference } from '../data.js';
-import { Icon, useToast } from '../ui.jsx';
+import { Icon, PageTitle, useToast } from '../ui.jsx';
 import { JobStep, PdfPicker } from './Analyze.jsx';
 
 // Same split as titleagent/training.py parse_expert_list: one item per numbered paragraph or blank-line block.
@@ -71,13 +71,7 @@ export function Training() {
   };
   return (
     <>
-      <section class="hero">
-        <div class="hero-text">
-          <div class="eyebrow-row"><span class="eyebrow">Optional</span></div>
-          <h1 class="title">Train The <span class="accent">Agent</span></h1>
-          <p class="lede">Upload A Commitment Your Team Already Worked, Paste The Closer's List, And Compare.</p>
-        </div>
-      </section>
+      <PageTitle>Train The <span class="accent">Agent</span></PageTitle>
       <section class="card" style="padding:24px;display:flex;flex-direction:column;gap:16px">
         <div class="two">
           <PdfPicker id="train-pdf" label="Worked Commitment (PDF)" hint="Drop it here or click to choose."

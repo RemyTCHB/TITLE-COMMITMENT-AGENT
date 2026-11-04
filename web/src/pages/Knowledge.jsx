@@ -5,7 +5,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { api } from '../api.js';
 import { useReference } from '../data.js';
 import { db } from '../firebase.js';
-import { Icon, Spinner, useToast, when } from '../ui.jsx';
+import { Icon, PageTitle, Spinner, useToast, when } from '../ui.jsx';
 
 const KIND = { missing: 'Missing Item', not_needed: 'Not Needed', wrong: 'Wrong Info', training: 'Training Gap' };
 
@@ -98,13 +98,7 @@ export function Knowledge({ me }) {
   };
   return (
     <>
-      <section class="hero">
-        <div class="hero-text">
-          <div class="eyebrow-row"><span class="eyebrow">What The Agent Knows</span></div>
-          <h1 class="title">Team <span class="accent">Knowledge</span></h1>
-          <p class="lede">Every Lesson Came From Your Team. The Agent Follows Every Active Lesson On Every Deal.</p>
-        </div>
-      </section>
+      <PageTitle>Team <span class="accent">Knowledge</span></PageTitle>
       <div class="tiles">
         <div class="card tile"><span>Finds Expert Items</span><b class={total ? 'green' : 'muted'}>{total ? `${Math.round((100 * matched) / total)}%` : '—'}</b>
           <small>{total ? `across ${Object.keys(latest).length} training example(s)` : 'run Training to measure'}</small></div>

@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'preact/hooks';
 import { isOpen, useAllItems, useDeals } from '../data.js';
 import { go } from '../router.js';
-import { Icon, Seg, Spinner, daysUntil, fmtDate } from '../ui.jsx';
+import { Bar, Icon, PageTitle, PinLine, Ring, Seg, Spinner, Stat, daysUntil, fmtDate } from '../ui.jsx';
 
 function DealCard({ d, items }) {
   const live = (items || []).filter(i => i.change !== 'removed');
@@ -10,28 +10,31 @@ function DealCard({ d, items }) {
   const done = live.filter(i => !isOpen(i)).length;
   const pct = live.length ? Math.round((100 * done) / live.length) : 0;
   const days = daysUntil(d.closing_date);
+  const open = d.status === 'open';
+  const progress = open && items !== undefined && live.length > 0;
   return (
     <a class="card deal-card" href={`#/deal/${d.id}`}>
+      {progress && <Ring pct={pct} cls="ring-wide" />}
       <div class="grow">
         <span class="row-title">{d.address || `Deal ${d.id}`}</span>
         <span class="row-sub">
           {[d.deal_type, d.closing_date && `closing ${fmtDate(d.closing_date)}`, d.tc && `TC ${d.tc}`, d.title_company]
             .filter(Boolean).join(' · ')}
         </span>
-      </div>
-      <div class="side">
-        {d.status !== 'open' ? <span class="chip">Closed</span>
-          : items === undefined ? <Spinner />
-            : blockers ? <span class="chip red"><span class="dot" />{blockers} blocker{blockers === 1 ? '' : 's'}</span>
-              : <span class="chip green"><Icon name="check" size={12} stroke={3} /> No blockers</span>}
-        <span style="display:flex;align-items:center;gap:10px">
-          {d.status === 'open' && days !== null && (
+        <div class="prog-line">
+          {progress && <Ring pct={pct} cls="ring-phone" />}
+          {progress && <Bar done={done} total={live.length} what="Items Cleared" />}
+          {!open ? <span class="chip">Closed</span>
+            : items === undefined ? <Spinner />
+              : blockers ? <span class="chip red"><span class="dot" />{blockers} blocker{blockers === 1 ? '' : 's'}</span>
+                : <span class="chip green"><Icon name="check" size={12} stroke={3} /> No blockers</span>}
+          {open && days !== null && (
             <span class={`chip ${days < 0 ? 'red' : days <= 7 ? 'orange' : ''}`}>
               {days < 0 ? `${-days}d past closing` : days === 0 ? 'Closing today' : `${days}d to closing`}
             </span>)}
-          <span class="pct">{pct}%</span>
-        </span>
+        </div>
       </div>
+      <Icon name="right" size={18} />
     </a>
   );
 }
@@ -53,31 +56,25 @@ export function Deals() {
   const closingSoon = open.filter(d => { const n = daysUntil(d.closing_date); return n !== null && n >= 0 && n <= 7; }).length;
   return (
     <>
-      <section class="hero">
-        <div class="hero-text">
-          <div class="eyebrow-row"><span class="eyebrow">Total Cash Home Buyers</span></div>
-          <h1 class="title">Title Commitment <span class="accent">Agent</span></h1>
-          <p class="lede">Every Commitment Reviewed, Every Item Needed To Close.</p>
+      <PageTitle>Title Commitment <span class="accent">Agent</span></PageTitle>
+
+      <PinLine cls="tabs-line">
+        <Seg label="Which deals" value={view} onChange={setView} options={[
+          { value: 'open', label: 'Open', n: open.length },
+          { value: 'closed', label: 'Closed', n: (deals || []).length - open.length },
+          { value: 'all', label: 'All', n: (deals || []).length }]} />
+        <div class="line-stats">
+          <Stat value={open.length} label="Open Deals" />
+          <Stat value={openBlockers} label="Open Blockers" cls={openBlockers ? 'red' : 'green'} />
+          <Stat value={closingSoon} label="Closing In 7 Days" />
         </div>
-        <div class="stats">
-          <div class="stat"><b>{open.length}</b><span>Open Deals</span></div>
-          <div class="stat"><b class={openBlockers ? 'red' : 'green'}>{openBlockers}</b><span>Open Blockers</span></div>
-          <div class="stat"><b>{closingSoon}</b><span>Closing In 7 Days</span></div>
-        </div>
-      </section>
+      </PinLine>
 
       <div class="card bar-card">
         <label class="sr" for="deal-search">Search deals</label>
         <input id="deal-search" class="input" style="flex:1 1 260px" placeholder="Search By Address, TC, Title Company Or Commitment #"
           value={q} onInput={e => setQ(e.currentTarget.value)} />
         <a class="btn primary" href="#/analyze"><Icon name="upload" /> Analyze A Commitment</a>
-      </div>
-
-      <div class="toolbar">
-        <Seg label="Which deals" value={view} onChange={setView} options={[
-          { value: 'open', label: 'Open', n: open.length },
-          { value: 'closed', label: 'Closed', n: (deals || []).length - open.length },
-          { value: 'all', label: 'All', n: (deals || []).length }]} />
       </div>
 
       {error ? <div class="note red" role="alert">Couldn't load the deals: {error.message}</div>
