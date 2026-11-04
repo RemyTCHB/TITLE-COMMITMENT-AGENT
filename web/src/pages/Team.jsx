@@ -4,8 +4,10 @@
 // through the engine (PUT /v1/team); before the first save it starts with the person signed in, as a Manager.
 import { useEffect, useState } from 'preact/hooks';
 import { api } from '../api.js';
+import { signInWithToken } from '../firebase.js';
+import { go } from '../router.js';
 import { useSettings } from '../data.js';
-import { Icon, Menu, PageTitle, Spinner, Stat, initials, useMenu, useToast } from '../ui.jsx';
+import { Icon, Menu, Modal, PageTitle, Spinner, Stat, initials, useMenu, useToast } from '../ui.jsx';
 
 const ROLE = { manager: 'Manager', lead: 'Team Leader', member: 'Member' };
 // The same team? (Firestore hands fields back in its own order, so compare the values.)
@@ -50,7 +52,7 @@ function Pick({ value, options, onChange, label, disabled }) {
   );
 }
 
-function Row({ p, admin, onEdit, onRemove }) {
+function Row({ p, admin, onEdit, onRemove, onLoginAs }) {
   const toast = useToast();
   const photo = async e => {
     const file = e.currentTarget.files[0]; e.currentTarget.value = '';
@@ -77,6 +79,8 @@ function Row({ p, admin, onEdit, onRemove }) {
         onChange={role => onEdit({ role, dept: role === 'manager' ? '' : p.dept || 'TC' })} />
       {p.role !== 'manager' && <Pick label="Department" value={p.dept || ''} options={DEPT} disabled={!admin}
         onChange={dept => onEdit({ dept })} />}
+      {onLoginAs && <button type="button" class="btn glass pill sm team-login" title={`See the app as ${p.name} sees it`}
+        onClick={onLoginAs}><Icon name="users" /> Login As User</button>}
       {admin && <button type="button" class="team-remove" title="Remove from the team" aria-label={`Remove ${p.name}`}
         onClick={onRemove}><Icon name="x" /></button>}
     </div>
@@ -91,6 +95,8 @@ export function Team({ me }) {
   const [draft, setDraft] = useState(null);
   const [np, setNp] = useState({ name: '', email: '', role: 'member', dept: 'TC' });
   const [busy, setBusy] = useState(false);
+  const [loginAs, setLoginAs] = useState(null);  // the person the owner is about to view as
+  const [switching, setSwitching] = useState(false);
   useEffect(() => {
     if (draft || !s || !me) return;
     const first = me.email.split('@')[0].split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
@@ -141,7 +147,8 @@ export function Team({ me }) {
         <section key={label} class="card team-group">
           <div class="eyebrow">{label}</div>
           {rows.map(p => <Row key={p.email} p={p} admin={admin} onEdit={x => edit(p.email, x)}
-            onRemove={() => setDraft(d => d.filter(x => x.email !== p.email))} />)}
+            onRemove={() => setDraft(d => d.filter(x => x.email !== p.email))}
+            onLoginAs={me?.login_as && p.email !== me.email && saved?.some(x => x.email === p.email) ? () => setLoginAs(p) : null} />)}
         </section>))}
 
       {admin && (
@@ -151,6 +158,24 @@ export function Team({ me }) {
             onClick={() => setDraft(JSON.parse(JSON.stringify(saved)))}>Cancel</button>
           <span class="row-sub">Saving sets who the admins are (the managers) and the TC list on Analyze.</span>
         </div>)}
+
+      {loginAs && (
+        <Modal title={`Login As ${loginAs.name}?`} onClose={() => !switching && setLoginAs(null)}>
+          <p class="lede" style="font-size:15px">You'll see and change exactly what {loginAs.name.split(' ')[0]} can.
+            Changes you make are recorded as theirs, via you. The bar at the top takes you back to your own account.</p>
+          <div class="actions">
+            <button class="btn ghost pill" disabled={switching} onClick={() => setLoginAs(null)}>Cancel</button>
+            <button class="btn primary pill" disabled={switching} onClick={async () => {
+              setSwitching(true);
+              try {
+                const { token } = await api.loginAs(loginAs.email);
+                await signInWithToken(token);
+                toast(`Now viewing the Title Commitment Agent as ${loginAs.name}.`);
+                setLoginAs(null); go('');
+              } catch (e) { toast(e.message, true); } finally { setSwitching(false); }
+            }}>{switching ? <Spinner /> : <Icon name="users" />} Login As {loginAs.name.split(' ')[0]}</button>
+          </div>
+        </Modal>)}
     </>
   );
 }

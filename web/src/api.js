@@ -70,6 +70,8 @@ export const api = {
   putTeam: body => call('PUT', '/v1/team', body),
   googleCheck: () => call('POST', '/v1/google/check'),
   helpPasswords: () => call('GET', '/v1/help/passwords'),
+  loginAs: email => call('POST', '/v1/login-as', { email }),
+  loginBack: () => call('POST', '/v1/login-as/back'),
 
   async download(dealId, format, include) {
     const res = await call('GET', `/v1/deals/${dealId}/export?format=${format}&include=${include}`, null, { raw: true });

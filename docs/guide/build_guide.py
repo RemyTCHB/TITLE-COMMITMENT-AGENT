@@ -869,6 +869,11 @@ def story(reader: str) -> list:
         "Click <b>Save Changes</b>. From then on the Managers are the admins and everyone in TC is in the TC list. "
         "You can't take away your own Manager role: another manager does that.",
     ])]
+    s += [box("<b>Login As User</b> (the owner only): on Team Members, the owner can see the app exactly as "
+              "someone sees it. Click <b>Login As User</b> on that person and confirm. An orange bar across the top "
+              "shows whose view it is; <b>Back To</b> returns to your own account. Anything changed meanwhile is "
+              "recorded as theirs, via you, and each use is logged. It works for anyone who has signed in before.",
+              "tip", "Login As User")]
     s += [CondPageBreak(3.6 * inch), P("Settings", "h2"),
           P("Click your photo → <b>Settings</b>. Change what you need, then click <b>Save Settings</b>."),
           shot("26-permissions", "Permissions, and picking who gets the daily email (made-up names).", 1.0,

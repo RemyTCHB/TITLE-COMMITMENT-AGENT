@@ -53,6 +53,11 @@ sync when a rule changes. (The first Streamlit version and its Neon database wer
   `admins` (the managers) and `tcs` (everyone in TC). It was copied once from the hub's Managers and TC department
   (2026-10-30; the copy button was then removed, the hub's `/api/title-agent/team` stays unused). Names and emails
   live only in the database, never in this public repository.
+- Login As User (owner 2026-11-04, as in the hub; the owner only): on Team Members the owner (GitHub secret
+  `LOGIN_AS_OWNER`, never in the repo) can view the app as anyone who has signed in before: `POST /v1/login-as` makes
+  a one-time Firebase sign-in for them marked `imp`, `POST /v1/login-as/back` returns (only from such a sign-in). An
+  orange bar shows whose view it is. Changes are recorded "<them> (via <owner>)" (`User.by`); each use goes to
+  `audit/` (server only). The engine identity needs `scripts/login_as_setup.sh` once (Auth Viewer + Token Creator).
 - Permissions (`settings.permissions`, Settings): what Team Leaders and Members may do (`approve_lessons`,
   `report_missing`); Managers always can. The engine checks them (`allowed()` in `engine/main.py`); `/v1/me` returns
   `role` and `can` for the page.

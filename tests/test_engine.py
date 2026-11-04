@@ -51,7 +51,7 @@ def test_only_verified_company_accounts_get_in(setup):
     assert client.get("/v1/me", headers=h("unverified")).status_code == 403
     assert client.get("/v1/me", headers=h("tc")).json() == {
         "email": "pat.tc@totalchb.com", "admin": True, "role": "manager",
-        "can": {"approve_lessons": True, "report_missing": True}}
+        "can": {"approve_lessons": True, "report_missing": True}, "imp": "", "login_as": False}
     ref = client.get("/v1/reference", headers=h("tc")).json()
     assert "Double Close" in ref["deal_types"] and sum(len(g["checks"]) for g in ref["checklist"]) == 34
     assert ref["connections"]["google"] is None and ref["connections"]["hub"] is False
@@ -282,3 +282,60 @@ def test_every_export_is_also_saved_in_its_drive_folder(monkeypatch):
     r = client.get(f"/v1/deals/{deal_id}/export?format=csv", headers=h("tc"))
     assert r.status_code == 200 and r.headers["x-drive-copy"] == "failed"
     assert unquote(r.headers["x-drive-note"]) == "The export key doesn't match."
+
+
+class FakeAccounts:
+    """Stand-in for Firebase Auth (Login As User): made-up people, one-time sign-ins as readable strings."""
+
+    def __init__(self):
+        self.users = {"owner@totalchb.com": {"uid": "u-owner", "disabled": False},
+                      "pat.tc@totalchb.com": {"uid": "u-tc", "disabled": False},
+                      "off@totalchb.com": {"uid": "u-off", "disabled": True}}
+
+    def user_by_email(self, email):
+        return self.users.get(email)
+
+    def sign_in_token(self, uid, claims=None):
+        return f"token-for-{uid}" + (f"-imp-{claims['imp']}" if claims else "")
+
+
+def test_login_as_user_is_for_the_owner_only_and_signs_changes_via_them():
+    from tests.conftest import firestore_store
+
+    store = firestore_store()
+    tokens = {**TOKENS, "as-tc": {"email": "pat.tc@totalchb.com", "email_verified": True, "uid": "u-tc",
+                                  "imp": "owner@totalchb.com"}}
+    client = TestClient(create_app(Engine(secrets=Secrets(None, None, None, login_as_owner="owner@totalchb.com"),
+                                          store=store, llm=demo.scripted_llm, verify=lambda t: tokens[t],
+                                          accounts=FakeAccounts())))
+    assert client.post("/v1/login-as", json={"email": "pat.tc@totalchb.com"}).status_code == 401  # not signed in
+    me = client.get("/v1/me", headers=h("owner")).json()
+    assert me["login_as"] is True and me["imp"] == ""
+    assert client.get("/v1/me", headers=h("tc")).json()["login_as"] is False
+    # only the owner; never from a borrowed sign-in; a team account that has signed in before
+    assert client.post("/v1/login-as", json={"email": "owner@totalchb.com"}, headers=h("tc")).status_code == 403
+    r = client.post("/v1/login-as", json={"email": "pat.tc@totalchb.com"}, headers=h("owner"))
+    assert r.status_code == 200 and r.json() == {"token": "token-for-u-tc-imp-owner@totalchb.com"}
+    assert r.headers["cache-control"] == "no-store"
+    assert client.post("/v1/login-as", json={"email": "owner@totalchb.com"}, headers=h("as-tc")).status_code == 403
+    assert client.post("/v1/login-as", json={"email": "x@gmail.com"}, headers=h("owner")).status_code == 400
+    assert client.post("/v1/login-as", json={"email": "owner@totalchb.com"}, headers=h("owner")).status_code == 400
+    assert client.post("/v1/login-as", json={"email": "new@totalchb.com"}, headers=h("owner")).status_code == 404
+    assert client.post("/v1/login-as", json={"email": "off@totalchb.com"}, headers=h("owner")).status_code == 403
+    # signed in as them: their view, changes recorded "<them> (via <owner>)"
+    me = client.get("/v1/me", headers=h("as-tc")).json()
+    assert me["email"] == "pat.tc@totalchb.com" and me["imp"] == "owner@totalchb.com" and me["login_as"] is False
+    deal_id = store.create_deal(by="test", address="1 Sample Way, Exampleton, OH")
+    assert client.post(f"/v1/deals/{deal_id}/missing", headers=h("as-tc"),
+                       json={"what": "Made-up final water bill"}).status_code == 200
+    fb = next(f for f in store.list_feedback() if f["text"] == "Made-up final water bill")
+    assert fb["created_by"] == "pat.tc@totalchb.com (via owner@totalchb.com)"
+    # back to the owner only from a sign-in the owner started
+    assert client.post("/v1/login-as/back", headers=h("tc")).status_code == 403
+    r = client.post("/v1/login-as/back", headers=h("as-tc"))
+    assert r.status_code == 200 and r.json() == {"token": "token-for-u-owner"}
+    # without the owner setting nobody can
+    off = TestClient(create_app(Engine(secrets=Secrets(None, None, None), store=store, llm=demo.scripted_llm,
+                                       verify=lambda t: tokens[t], accounts=FakeAccounts())))
+    assert off.get("/v1/me", headers=h("owner")).json()["login_as"] is False
+    assert off.post("/v1/login-as", json={"email": "pat.tc@totalchb.com"}, headers=h("owner")).status_code == 403

@@ -4,11 +4,12 @@
 // row 2 the tabs; light / dark moves into the photo menu.
 import { useEffect, useState } from 'preact/hooks';
 import { useSettings } from './data.js';
-import { signOutNow } from './firebase.js';
+import { api } from './api.js';
+import { signIn, signInWithToken, signOutNow } from './firebase.js';
 import { go } from './router.js';
 import { clearFailure, eastern, liveState, now, useStatus } from './status.js';
 import { useTheme } from './theme.js';
-import { Icon, Menu, Modal, Seg, initials, useMenu } from './ui.jsx';
+import { Icon, Menu, Modal, Seg, Spinner, initials, useMenu, useToast } from './ui.jsx';
 
 const TABS = [
   { value: 'deals', label: 'Deals' }, { value: 'analyze', label: 'Analyze' },
@@ -114,6 +115,30 @@ function Account({ user, me, onHelp, theme, setTheme }) {
   );
 }
 
+// Login As User: an orange bar across the top shows whose view it is, with the way back to your own account.
+function ViewingAs({ user, me }) {
+  const toast = useToast();
+  const s = useSettings();
+  const [busy, setBusy] = useState(false);
+  const team = s?.team || [];
+  const them = team.find(p => p.email === user.email), owner = team.find(p => p.email === me.imp);
+  const back = async () => {
+    setBusy(true);
+    try { await signInWithToken((await api.loginBack()).token); go(''); }
+    catch (e) {  // the server couldn't: sign in with Google instead
+      toast(`${e.message} Sign in with your Google account.`, true);
+      try { await signOutNow(); await signIn(); } catch { /* the sign-in screen shows */ }
+    } finally { setBusy(false); }
+  };
+  return (
+    <div class="viewing-as" role="status">
+      <span>Viewing the Title Commitment Agent as <b>{them?.name || user.email}</b> ({user.email})</span>
+      <button type="button" onClick={back} disabled={busy}>{busy ? <Spinner /> : null}
+        {busy ? 'Switching Back…' : `Back To ${owner?.name?.split(' ')[0] || 'My Account'}`}</button>
+    </div>
+  );
+}
+
 export function Header({ user, me, page, onHelp, compact, headRef }) {
   const [theme, setTheme] = useTheme();
   return (
@@ -135,6 +160,7 @@ export function Header({ user, me, page, onHelp, compact, headRef }) {
           {user && <Account user={user} me={me} onHelp={onHelp} theme={theme} setTheme={setTheme} />}
         </div>
       </div>
+      {user && me?.imp && <ViewingAs user={user} me={me} />}
     </header>
   );
 }

@@ -48,6 +48,28 @@ class Engine:
     llm: Callable[[], LLM]
     verify: Callable[[str], dict]  # Firebase ID token -> claims
     verify_task: Callable[[str], dict] | None = None  # Google-signed token from Cloud Scheduler -> claims
+    accounts: object = None  # Login As User: Firebase Auth lookups and one-time sign-ins (FirebaseAccounts)
+
+
+class FirebaseAccounts:
+    """Firebase Auth for Login As User: find someone's account, and make a one-time sign-in for it (a custom token,
+    signed by the engine's own Google identity, which needs the Firebase Authentication Viewer and Service Account
+    Token Creator roles: scripts/login_as_setup.sh)."""
+
+    def user_by_email(self, email: str):
+        from firebase_admin import auth
+
+        try:
+            u = auth.get_user_by_email(email)
+        except auth.UserNotFoundError:
+            return None
+        return {"uid": u.uid, "disabled": u.disabled}
+
+    def sign_in_token(self, uid: str, claims: dict | None = None) -> str:
+        from firebase_admin import auth
+
+        token = auth.create_custom_token(uid, claims or None)
+        return token.decode() if isinstance(token, bytes) else token
 
 
 def _firebase_verify(secrets: Secrets) -> Callable[[str], dict]:
@@ -82,7 +104,7 @@ def default_engine() -> Engine:
         def llm() -> LLM:
             return ClaudeLLM(secrets.anthropic_api_key or "")
     return Engine(secrets=secrets, store=open_store(secrets), llm=llm, verify=_firebase_verify(secrets),
-                  verify_task=_google_verify(secrets.tasks_audience))
+                  verify_task=_google_verify(secrets.tasks_audience), accounts=FirebaseAccounts())
 
 
 @dataclass
@@ -92,6 +114,12 @@ class User:
     admin: bool  # a Manager on the Team tab (before a team is saved: everyone listed in admins, or everyone)
     role: str = "member"  # manager | lead | member (not on the team: member)
     can: dict | None = None  # {permission: bool} from Settings → Permissions
+    imp: str = ""  # Login As User: the owner who is signed in as this person ('' normally)
+
+    @property
+    def by(self) -> str:
+        """Who made a change, for the records: "<their email> (via <owner>)" while the owner views as them."""
+        return f"{self.email} (via {self.imp})" if self.imp else self.email
 
 
 # ---------------------------------------------------------------- request bodies
@@ -140,6 +168,9 @@ class ItemPatch(BaseModel):
     due_date: str | None = Field(default=None, description="YYYY-MM-DD, or empty to clear (the time too)")
     due_time: str | None = Field(default=None, description="HH:MM, 24-hour Eastern, or empty for the day only")
     notes: str | None = None
+
+class LoginAsIn(BaseModel):
+    email: str = Field(min_length=3, max_length=120)
 
 class TeamPerson(BaseModel):
     name: str = Field(min_length=1, max_length=80)
@@ -211,7 +242,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         rules = {**DEFAULT_SETTINGS["permissions"].get(role, {}), **(settings.get("permissions") or {}).get(role, {})}
         can = {k: is_admin or bool(rules.get(k)) for k in PERMISSIONS}
         return User(email=email, uid=str(claims.get("uid") or claims.get("user_id") or ""), admin=is_admin,
-                    role=role, can=can)
+                    role=role, can=can, imp=str(claims.get("imp") or "").lower())
 
     def admin(u: User = Depends(user)) -> User:
         if not u.admin:
@@ -293,8 +324,46 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         return {"ok": True}
 
     @app.get("/v1/me")
-    def me(u: User = Depends(user)):
-        return {"email": u.email, "admin": u.admin, "role": u.role, "can": u.can}
+    def me(u: User = Depends(user), e: Engine = Depends(eng)):
+        owner = e.secrets.login_as_owner
+        return {"email": u.email, "admin": u.admin, "role": u.role, "can": u.can, "imp": u.imp,
+                "login_as": bool(owner and u.email == owner and not u.imp and e.accounts)}
+
+    # ---- Login As User (owner 2026-11-04, as in the hub): the owner signs in as a team member to see their view
+    @app.post("/v1/login-as")
+    def login_as(body: LoginAsIn, u: User = Depends(user), e: Engine = Depends(eng)):
+        """A one-time sign-in for that person, marked imp: the owner (they see and change exactly what that person
+        can; changes are recorded "<them> (via <owner>)"). Only the owner, never from a borrowed sign-in."""
+        owner = e.secrets.login_as_owner
+        if not (owner and e.accounts and u.email == owner and not u.imp):
+            raise HTTPException(403, "Only the owner can do this.")
+        target = body.email.strip().lower()
+        if target == owner or not email_allowed(target, e.secrets.allowed_emails, e.secrets.allowed_domains):
+            raise HTTPException(400, "Which team member?")
+        found = e.accounts.user_by_email(target)
+        if not found:
+            raise HTTPException(404, "They haven't signed in to the Title Commitment Agent yet, so there is no account "
+                                     "to open.")
+        if found["disabled"]:
+            raise HTTPException(403, "That account is turned off.")
+        token = e.accounts.sign_in_token(found["uid"], {"imp": owner})
+        e.store.add_audit("login as", by=owner, person=target)
+        log.info("login as: ok")
+        return JSONResponse({"token": token}, headers={"Cache-Control": "no-store"})
+
+    @app.post("/v1/login-as/back")
+    def login_back(u: User = Depends(user), e: Engine = Depends(eng)):
+        """Back to the owner's own account, from a sign-in the owner started (and only from one)."""
+        owner = e.secrets.login_as_owner
+        if not (owner and e.accounts and u.imp and u.imp == owner):
+            raise HTTPException(403, "Not a Login As session.")
+        found = e.accounts.user_by_email(owner)
+        if not found:
+            raise HTTPException(500, "Couldn't switch back. Sign in with Google.")
+        token = e.accounts.sign_in_token(found["uid"])
+        e.store.add_audit("back", by=owner, person=u.email)
+        log.info("login as: back")
+        return JSONResponse({"token": token}, headers={"Cache-Control": "no-store"})
 
     @app.get("/v1/help/passwords")
     def help_passwords(u: User = Depends(user), e: Engine = Depends(eng)):
@@ -426,7 +495,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                 e: Engine = Depends(eng)):
         deal_or_404(e, deal_id)
         out = {"feedback_id": flows.missing_item(e.store, deal_id, body.what, body.where, body.why, body.priority,
-                                                 body.provided_by, u.email, body.add_to_list)}
+                                                 body.provided_by, u.by, body.add_to_list)}
         if body.add_to_list and body.priority == "blocker":
             to_hub(bg, e, deal_id)
         return out
@@ -463,7 +532,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         if body.notes is not None:
             changes["notes"] = body.notes[:2000]
         if changes:
-            e.store.update_item(deal_id, body.key, by=u.email, **changes)
+            e.store.update_item(deal_id, body.key, by=u.by, **changes)
             if item.priority == "blocker" and changes.keys() & {"status", "due_date", "due_time"}:
                 to_hub(bg, e, deal_id)
         return {"ok": True}
@@ -514,7 +583,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         if body.item_key not in titles:
             raise HTTPException(404, "That item isn't on this deal's list.")
         text = f"{titles[body.item_key]}: {body.note}".strip(": ")
-        return {"feedback_id": e.store.add_feedback(body.kind, text, by=u.email, deal_id=deal_id,
+        return {"feedback_id": e.store.add_feedback(body.kind, text, by=u.by, deal_id=deal_id,
                                                     item_key=body.item_key, detail={"note": body.note})}
 
     # ---- admins
@@ -522,13 +591,13 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     def resolve(feedback_id: int, body: ResolveIn, u: User = Depends(lessons), e: Engine = Depends(eng)):
         if body.approve and not body.lesson.strip():
             raise HTTPException(400, "Write the lesson as a general rule before approving it.")
-        return {"lesson_id": e.store.resolve_feedback(feedback_id, body.approve, body.lesson, by=u.email)}
+        return {"lesson_id": e.store.resolve_feedback(feedback_id, body.approve, body.lesson, by=u.by)}
 
     @app.post("/v1/lessons")
     def add_lesson(body: LessonIn, u: User = Depends(lessons), e: Engine = Depends(eng)):
         if not body.text.strip():
             raise HTTPException(400, "Write the lesson first.")
-        return {"lesson_id": e.store.add_lesson(body.text, source="manual", by=u.email)}
+        return {"lesson_id": e.store.add_lesson(body.text, source="manual", by=u.by)}
 
     @app.patch("/v1/lessons/{lesson_id}")
     def set_lesson(lesson_id: int, body: LessonPatch, u: User = Depends(lessons), e: Engine = Depends(eng)):
@@ -552,7 +621,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             if key == "due_offsets":  # every kind keeps a value: missing ones fall back to the defaults
                 value = {**DEFAULT_SETTINGS["due_offsets"],
                          **{k: int(v) for k, v in dict(value).items() if k in DEFAULT_SETTINGS["due_offsets"]}}
-            e.store.set_setting(key, value, by=u.email)
+            e.store.set_setting(key, value, by=u.by)
         return {"ok": True}
 
     @app.put("/v1/team")
@@ -577,10 +646,10 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         if u.email not in managers:
             raise HTTPException(400, "Keep yourself a Manager: another manager can change your role.")
         tc = [p for p in people if p["dept"] == "TC"]
-        e.store.set_setting("team", people, by=u.email)
-        e.store.set_setting("admins", managers, by=u.email)
+        e.store.set_setting("team", people, by=u.by)
+        e.store.set_setting("admins", managers, by=u.by)
         e.store.set_setting("tcs", [p["name"] for p in tc if p["role"] == "lead"]
-                            + [p["name"] for p in tc if p["role"] != "lead"], by=u.email)
+                            + [p["name"] for p in tc if p["role"] != "lead"], by=u.by)
         return {"ok": True}
 
     @app.post("/v1/google/check")

@@ -174,6 +174,10 @@ class FirestoreStore:
         saved = {s.id: s.get("value") for s in self.db.collection("settings").stream()}
         return {**DEFAULT_SETTINGS, **saved}
 
+    def add_audit(self, kind: str, by: str, **detail) -> None:
+        """Server-only record (Login As User): no Firestore rule lets the page read audit/."""
+        self.db.collection("audit").add({"kind": kind, "by": by, **detail, "at": _now()})
+
     def set_setting(self, key: str, value, by: str = "") -> None:
         self.db.document(f"settings/{key}").set({"value": value, "updated_at": _now(), "updated_by": by})
 

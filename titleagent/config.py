@@ -80,6 +80,9 @@ class Secrets:
     # this audience (the engine's address), from this service account (scripts/scheduler_setup.sh)
     tasks_audience: str | None = None
     tasks_caller: str | None = None
+    # Login As User (owner 2026-11-04): the one account that may sign in as a team member to see their view, as in the
+    # hub. A GitHub secret (LOGIN_AS_OWNER), never in this public repository.
+    login_as_owner: str | None = None
 
     @property
     def has_ai(self) -> bool:
@@ -146,6 +149,7 @@ def load_secrets() -> Secrets:
         hub_secret=get("HUB_SYNC_SECRET"),
         tasks_audience=get("TASKS_AUDIENCE"),
         tasks_caller=get("TASKS_CALLER"),
+        login_as_owner=(get("LOGIN_AS_OWNER") or "").strip().lower() or None,
     )
 
 

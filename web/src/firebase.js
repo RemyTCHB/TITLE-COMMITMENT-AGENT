@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { GoogleAuthProvider, connectAuthEmulator, getAuth, signInWithCredential, signInWithPopup, signOut } from 'firebase/auth';
+import { GoogleAuthProvider, connectAuthEmulator, getAuth, signInWithCredential, signInWithCustomToken, signInWithPopup, signOut } from 'firebase/auth';
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
 import { connectStorageEmulator, getStorage } from 'firebase/storage';
 import { EMULATORS, TEAM_DOMAIN, firebaseConfig } from './config.js';
@@ -35,3 +35,6 @@ export async function signIn() {
 }
 
 export const signOutNow = () => signOut(auth);
+
+// Login As User: the engine's one-time sign-in for someone else (or back to the owner).
+export const signInWithToken = token => signInWithCustomToken(auth, token);

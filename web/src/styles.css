@@ -145,6 +145,17 @@ input::placeholder, textarea::placeholder { color: var(--tchb-gray-500); }
 .live-menu p.muted { font-size: 12px; color: var(--text-muted); padding-bottom: 8px; }
 .menu.live-menu .btn { width: calc(100% - 16px); margin: 0 8px; justify-content: center; }
 
+/* Login As User: whose view this is, and the way back */
+.viewing-as { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 14px; padding: 10px 16px;
+  background: #b45309; color: #fff; font-family: var(--font-display); font-weight: 700; font-size: 14px; text-align: center;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18); }
+.viewing-as b { font-weight: 800; }
+.viewing-as button { display: inline-flex; align-items: center; gap: 6px; border: 1px solid rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.14); color: #fff; cursor: pointer; border-radius: 999px; padding: 6px 14px;
+  font-family: var(--font-display); font-weight: 700; font-size: 13px; }
+.viewing-as button:hover { background: rgba(255, 255, 255, 0.26); }
+.team-login { flex: none; }
+
 /* the photo menu: you, then My Settings, Team Members, Help, Sign Out */
 .menu.acct-menu { min-width: 270px; }
 .acct-you { display: flex; align-items: center; gap: 10px; padding: 8px 10px; }
