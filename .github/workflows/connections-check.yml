@@ -1,0 +1,20 @@
+name: Connections check
+
+# By hand (Run workflow): the live Team Hub accepts this app's signed requests (Help's delete passwords), the engine
+# is up, and the page serves the in-app guides (scripts/connections_check.py). Logs show status codes and counts only.
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --no-dev
+      - run: uv run --no-sync python scripts/connections_check.py
+        env:
+          HUB_SYNC_SECRET: ${{ secrets.HUB_SYNC_SECRET }}
+          HUB_URL: ${{ vars.HUB_URL }}  # optional; default https://hub.totalchb.com/api/title-agent
+          APP_URL: ${{ vars.APP_URL }}  # https://title.totalchb.com
