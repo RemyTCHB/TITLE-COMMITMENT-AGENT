@@ -106,6 +106,7 @@ input::placeholder, textarea::placeholder { color: var(--tchb-gray-500); }
 .head-break { display: none; }
 .logo { height: 64px; display: flex; align-items: center; }
 .logo img { height: 64px; width: auto; display: block; }
+.logo .lg-mark { display: none; }  /* phones: the square mark instead of the full logo, as in Dispo Ops */
 .seg.pagetabs { flex: none; }
 .seg.pagetabs button { padding: 9px 18px; letter-spacing: 0.04em; }
 .seg.theme button { width: 40px; height: 32px; padding: 0; justify-content: center; }
@@ -459,6 +460,8 @@ textarea.input { resize: vertical; min-height: 84px; }
   .header-row { padding: 10px 16px; gap: 10px 8px; position: relative; }
   .head-left { flex: 1 1 100%; order: 1; min-width: 0; gap: 10px; padding-right: 54px; }
   .logo, .logo img { height: 40px; }
+  .logo .lg-full { display: none; }
+  .logo .lg-mark { display: block; width: 40px; border-radius: 10px; }
   .live-clock { font-size: 12px; padding: 0 12px 0 11px; }
   .live-clock .date { display: none; }
   .head-right { display: contents; }

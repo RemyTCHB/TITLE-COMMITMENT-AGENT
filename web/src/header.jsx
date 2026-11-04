@@ -121,7 +121,8 @@ export function Header({ user, me, page, onHelp, compact, headRef }) {
       <div class="header-row">
         <div class="head-left">
           <a class="logo" href="#/" aria-label="Title Commitment Agent home">
-            <img src={theme === 'dark' ? '/logo-full-white.png' : '/logo-full.png'} alt="Total Cash Home Buyers" />
+            <img class="lg-full" src={theme === 'dark' ? '/logo-full-white.png' : '/logo-full.png'} alt="Total Cash Home Buyers" />
+            <img class="lg-mark" src="/logo-mark.png" alt="Total Cash Home Buyers" width="40" height="40" />
           </a>
           {user && <LiveClock />}
         </div>
