@@ -810,8 +810,8 @@ def story(reader: str) -> list:
                                                                    "Folder)."],
         ["I can't see Report Missing Item, or can't approve lessons.", "Your role doesn't allow it yet. A manager "
                                                                          "can turn it on: Settings → Permissions."],
-        ["How do I change someone's role or photo?", "Managers: your photo, top right → Team. Pick the role, click "
-                                                     "the picture for a new photo, then Save Changes."],
+        ["How do I change someone's role or photo?", "In the Universal Team Hub (Managers): your photo → Team "
+                                                     "Members. The Title Commitment Agent follows within 10 minutes."],
         ["Who sees my changes?", "Everyone on the team, immediately. Your email is recorded on each change."],
         ["Where do I find this guide again?", "Your photo, top right → Help."],
     ], [0.38, 0.62])]
@@ -861,19 +861,17 @@ def story(reader: str) -> list:
     if reader != "manager":
         return s
     s += [CondPageBreak(4.5 * inch), P("Team (Managers only)", "h2"),
-          P("The same team as the Universal Team Hub's Managers and TC department. Managers are the admins; everyone "
-            "in TC is in the TC list when you confirm a deal. Open it from your photo, top right → <b>Team</b>."),
+          P("The team comes from the Universal Team Hub on its own: the hub's Managers and its TC department, with "
+            "their roles and photos. Managers are the admins; everyone in TC is in the TC list when you confirm a "
+            "deal. Open it from your photo, top right → <b>Team</b>, to see who's on it."),
           shot("25-menu", "Your photo opens Settings, Team (Managers only), Help and Sign Out.", 0.5,
-               crop=(0.6, 0.0, 0.86, 0.37)),
-          shot("23-team", "Team: photos, roles and departments (made-up names).", 1.0,
-               crop=(0.14, 0.12, 0.86, 0.92), max_h=4.6)]
+               crop=(0.6, 0.0, 0.86, 0.37))]
     s += [steps([
-        "To add someone, fill in <b>Add A Person</b> (name, @totalchb.com sign-in email, role and department) "
-        "and click <b>Add</b>.",
-        "Click a person's picture to add or change their photo (it's cropped to a circle), click a name to fix it, "
-        "and pick their <b>Role</b> and <b>Department</b>. The × removes them.",
-        "Click <b>Save Changes</b>. From then on the Managers are the admins and everyone in TC is in the TC list. "
-        "You can't take away your own Manager role: another manager does that.",
+        "To add someone, change a role or department, or change a photo, do it in the <b>Universal Team Hub</b>: "
+        "your photo → <b>Team Members</b>.",
+        "Within 10 minutes the team here follows: new people appear, roles change, and anyone removed from the hub's "
+        "Managers and TC leaves this team.",
+        "Anyone else with a @totalchb.com account can still sign in, as a Member.",
     ])]
     s += [box("<b>Login As User</b> (the owner only): on Team Members, the owner can see the app exactly as "
               "someone sees it. Click <b>Login As User</b> on that person and confirm. An orange bar across the top "

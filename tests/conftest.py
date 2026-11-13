@@ -22,3 +22,15 @@ def firestore_store(project: str | None = None):
 @pytest.fixture
 def store():
     return firestore_store()
+
+
+@pytest.fixture(autouse=True)
+def _no_live_hub_team(monkeypatch):
+    """Tests never reach a real hub for the team (the engine reads it on sign-in checks once the hub is connected):
+    by default it is unreachable and the team stays as the test saved it; a test that needs it sets hub.team."""
+    from titleagent import hub
+
+    def unreachable(*_a, **_k):
+        raise hub.HubTeamError("Couldn't reach the Team Hub.")
+
+    monkeypatch.setattr(hub, "team", unreachable)

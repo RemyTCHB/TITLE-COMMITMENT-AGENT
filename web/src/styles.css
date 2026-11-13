@@ -294,6 +294,7 @@ input::placeholder, textarea::placeholder { color: var(--tchb-gray-500); }
 .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
   font-family: var(--font-display); font-weight: 700; font-size: 12px; letter-spacing: 0.04em;
   background: var(--tchb-indigo-050); color: var(--tchb-indigo-700); white-space: nowrap; }
+.team-tags { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 .chip.red { background: var(--tchb-red-050); color: var(--tchb-red-500); }
 .chip.green { background: var(--tchb-green-050); color: var(--tchb-green-600); }
 .chip.orange { background: var(--tchb-orange-050); color: var(--tchb-orange-600); }

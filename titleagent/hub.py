@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import time
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
@@ -158,3 +159,46 @@ def passwords(secrets, email: str, post=None) -> dict:
 
 # Team photos may be links to the hub's photo store (the team was first copied from the hub, 2026-10-30)
 PHOTO_HOSTS = ("https://firebasestorage.googleapis.com/",)
+_DATA_PHOTO = re.compile(r"^data:image/(jpeg|png);base64,[A-Za-z0-9+/=]+$")
+
+
+class HubTeamError(Exception):
+    """The hub's team couldn't be read (not connected, unreachable or refused); the team stays as it was."""
+
+
+def team(secrets, post=None) -> list[dict]:
+    """The Managers and the TC department from the hub's team directory (owner 2026-11-13: the team follows the hub,
+    as TC Checklist's names do). POST <hub>/team with {} signed like the sync; the hub answers
+    {"people": [{name, email, role, dept, photo}]}, Managers first, then TC with its Team Leaders first."""
+    if not getattr(secrets, "has_hub", False):
+        raise HubTeamError("The Team Hub isn't connected.")
+    body = b"{}"
+    try:
+        r = (post or requests.post)(f"{secrets.hub_url.rstrip('/')}/team", data=body,
+                                    headers=signed_headers(secrets.hub_secret, body), timeout=6)
+    except requests.RequestException as exc:
+        raise HubTeamError("Couldn't reach the Team Hub.") from exc
+    if r.status_code != 200:
+        raise HubTeamError(f"The Team Hub answered {r.status_code}.")
+    return list((r.json() or {}).get("people") or [])
+
+
+def team_rows(people: list[dict], allowed) -> list[dict]:
+    """The hub's people as this app's team: name, email, role (manager / lead / member), dept ("TC" or ""), photo (a
+    hub photo link or a small JPEG / PNG data: URL, else none). Sign-ins this app doesn't allow and repeats are left
+    out; the hub's order is kept."""
+    rows, seen, room = [], set(), 650_000  # one settings record holds them all (1 MB at most)
+    for p in people:
+        email = str(p.get("email") or "").strip().lower()
+        if not email or email in seen or not allowed(email):
+            continue
+        seen.add(email)
+        role = p.get("role") if p.get("role") in ("manager", "lead", "member") else "member"
+        photo = str(p.get("photo") or "")
+        ok = ((photo.startswith(PHOTO_HOSTS) and len(photo) < 2000)
+              or (_DATA_PHOTO.match(photo) and len(photo) < 120_000))
+        photo = photo if ok and len(photo) <= room else ""
+        room -= len(photo)
+        rows.append({"name": " ".join(str(p.get("name") or email).split())[:80], "email": email, "role": role,
+                     "dept": "TC" if role != "manager" and p.get("dept") == "TC" else "", "photo": photo})
+    return rows

@@ -1,7 +1,9 @@
 // Team (Managers only, from the account menu): who's on it, with roles, departments and photos, as in the Universal
 // Team Hub's Team Members.
-// Managers are the admins (they approve lessons and change settings); everyone in TC is in the TC list. Saved
-// through the engine (PUT /v1/team); before the first save it starts with the person signed in, as a Manager.
+// Managers are the admins (they approve lessons and change settings); everyone in TC is in the TC list.
+// Owner 2026-11-13: once the Team Hub is connected (me.team_from_hub) the team follows the hub's Managers and TC
+// department on its own (the engine reads it at most every 10 minutes) and this page only shows it, with Login As
+// User. Without the hub (local work) it is edited here and saved through the engine (PUT /v1/team).
 import { useEffect, useState } from 'preact/hooks';
 import { api } from '../api.js';
 import { signInWithToken } from '../firebase.js';
@@ -75,10 +77,14 @@ function Row({ p, admin, onEdit, onRemove, onLoginAs }) {
           <span>{p.email}</span>
         </div>
       </div>
-      <Pick label="Role" value={p.role} options={ROLE} disabled={!admin}
-        onChange={role => onEdit({ role, dept: role === 'manager' ? '' : p.dept || 'TC' })} />
-      {p.role !== 'manager' && <Pick label="Department" value={p.dept || ''} options={DEPT} disabled={!admin}
-        onChange={dept => onEdit({ dept })} />}
+      {admin ? <>
+        <Pick label="Role" value={p.role} options={ROLE}
+          onChange={role => onEdit({ role, dept: role === 'manager' ? '' : p.dept || 'TC' })} />
+        {p.role !== 'manager' && <Pick label="Department" value={p.dept || ''} options={DEPT}
+          onChange={dept => onEdit({ dept })} />}
+      </> : <span class="team-tags">
+        <span class="chip">{ROLE[p.role]}</span>{p.role !== 'manager' && <span class="chip">{DEPT[p.dept || '']}</span>}
+      </span>}
       {onLoginAs && <button type="button" class="btn glass pill sm team-login" title={`See the app as ${p.name} sees it`}
         onClick={onLoginAs}><Icon name="users" /> Login As User</button>}
       {admin && <button type="button" class="team-remove" title="Remove from the team" aria-label={`Remove ${p.name}`}
@@ -90,7 +96,8 @@ function Row({ p, admin, onEdit, onRemove, onLoginAs }) {
 export function Team({ me }) {
   const toast = useToast();
   const s = useSettings();
-  const admin = !!me?.admin;
+  const fromHub = !!me?.team_from_hub;
+  const admin = !!me?.admin && !fromHub;  // may edit here
   const saved = s?.team;
   const [draft, setDraft] = useState(null);
   const [np, setNp] = useState({ name: '', email: '', role: 'member', dept: 'TC' });
@@ -100,9 +107,12 @@ export function Team({ me }) {
   useEffect(() => {
     if (draft || !s || !me) return;
     const first = me.email.split('@')[0].split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-    setDraft(JSON.parse(JSON.stringify(saved || [{ name: first, email: me.email, role: 'manager', dept: '', photo: '' }])));
+    setDraft(JSON.parse(JSON.stringify(saved || (me.team_from_hub ? []
+      : [{ name: first, email: me.email, role: 'manager', dept: '', photo: '' }]))));
   }, [s, me]);
-  if (me && !admin) return <section class="empty"><h3>Managers only</h3><p>Ask a manager to change the team.</p></section>;
+  // From the hub: always show the team as saved (it changes on its own).
+  useEffect(() => { if (me?.team_from_hub && saved) setDraft(JSON.parse(JSON.stringify(saved))); }, [me, key(saved)]);
+  if (me && !me.admin) return <section class="empty"><h3>Managers only</h3><p>Ask a manager to change the team.</p></section>;
   if (!draft) return <p class="lede"><Spinner /> Loading the team…</p>;
   const dirty = !saved || key(draft) !== key(saved);
   const edit = (email, x) => setDraft(d => d.map(p => (p.email === email ? { ...p, ...x } : p)));
@@ -130,7 +140,10 @@ export function Team({ me }) {
         <Stat value={draft.filter(p => p.dept === 'TC').length} label="In TC" />
       </div>
 
-      {!saved && <div class="note">No team saved yet. Add the Managers and the TC department below, then Save Changes.</div>}
+      {fromHub && <div class="note">The team comes from the Universal Team Hub: its Managers and the TC department,
+        with their roles and photos. Change people there (your photo → Team Members); changes show here within
+        10 minutes. <a href="https://hub.totalchb.com" target="_blank" rel="noopener">Open the Team Hub</a></div>}
+      {!fromHub && !saved && <div class="note">No team saved yet. Add the Managers and the TC department below, then Save Changes.</div>}
 
       {admin && (
         <div class="card team-add">

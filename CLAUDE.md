@@ -54,10 +54,14 @@ sync when a rule changes. (The first Streamlit version and its Neon database wer
   calls, `src/styles.css` the hub's tokens and components. Copy the hub's look from RemyTCHB/HUB (`app/app.dc.html`),
   e.g. the due date picker (`ui.jsx` DatePicker: the day, and for item due dates an hour and minute in Eastern time, saved as `due_time` "HH:MM"; the closing date is the day only) and Team Members (`pages/Team.jsx`).
 - Team (owner 2026-10-30; Managers only, from the account menu): `settings/team` (name, email, role manager / lead /
-  member, dept TC, a photo as a small data: URL or the hub's photo URL), saved by `PUT /v1/team`, which also sets
-  `admins` (the managers) and `tcs` (everyone in TC). It was copied once from the hub's Managers and TC department
-  (2026-10-30; the copy button was then removed, the hub's `/api/title-agent/team` stays unused). Names and emails
-  live only in the database, never in this public repository.
+  member, dept TC, a photo as a small data: URL or the hub's photo URL), with `admins` (the managers) and `tcs`
+  (everyone in TC). **Owner 2026-11-13: the team follows the hub**, as TC Checklist's names do: the engine reads the
+  hub's Managers and TC department (`hub.team()`, `POST <hub>/team` with `{}`, signed with `HUB_SYNC_SECRET`) at most
+  every 10 minutes on sign-in checks and in the morning task (`sync_team` in `engine/main.py`), and saves it only when
+  it changed (recorded by "Universal Team Hub"). An unreachable hub, or an answer with no managers, keeps the team as
+  it was. Team Members only shows the team then (plus Login As User); `PUT /v1/team` answers 409 while the hub is
+  connected and is used only without it (local work, tests). Names and emails live only in the database, never in
+  this public repository.
 - Login As User (owner 2026-11-04, as in the hub; the owner only): on Team Members the owner (GitHub secret
   `LOGIN_AS_OWNER`, never in the repo) can view the app as anyone who has signed in before: `POST /v1/login-as` makes
   a one-time Firebase sign-in for them marked `imp`, `POST /v1/login-as/back` returns (only from such a sign-in). An

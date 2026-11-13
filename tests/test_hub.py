@@ -189,3 +189,97 @@ def test_engine_help_passwords_only_for_team_leaders_and_managers(monkeypatch):
     monkeypatch.setattr(hub, "passwords", down)
     r = client.get("/v1/help/passwords", headers=h("tc"))
     assert r.status_code == 503 and r.json()["detail"] == "Couldn't reach the Team Hub. Try again."
+
+
+def test_the_team_comes_from_the_hub_signed(monkeypatch):
+    monkeypatch.undo()  # the real hub.team, not the tests' unreachable stand-in
+    real, asked = hub, []
+
+    def post(url, data, headers, timeout):
+        assert real.verify("s3cret", data, headers["X-Hub-Timestamp"], headers["X-Hub-Signature"])
+        asked.append((url, json.loads(data)))
+        return Answer(200, {"people": [{"name": "Sample Boss", "email": "boss@totalchb.com", "role": "manager"}]})
+
+    assert real.team(SECRETS, post=post) == [{"name": "Sample Boss", "email": "boss@totalchb.com", "role": "manager"}]
+    assert asked == [("https://hub.example/api/title-agent/team", {})]  # {} = the Managers and TC
+    with pytest.raises(real.HubTeamError, match="401"):
+        real.team(SECRETS, post=lambda *a, **k: Answer(401))
+    with pytest.raises(real.HubTeamError, match="isn't connected"):
+        real.team(Secrets(None, None, None))
+
+
+def test_team_rows_from_the_hub():
+    link = "https://firebasestorage.googleapis.com/v0/b/x/o/p.jpg?alt=media"
+    jpeg = "data:image/jpeg;base64,/9j/4AAQSkZJRg=="
+    people = [{"name": "Sample  Boss", "email": "Boss@totalchb.com", "role": "manager", "dept": "TC", "photo": link},
+              {"name": "Lee Lead", "email": "lee@totalchb.com", "role": "lead", "dept": "TC", "photo": jpeg},
+              {"name": "Sam Member", "email": "sam@totalchb.com", "role": "member", "dept": "TC",
+               "photo": "javascript:alert(1)"},
+              {"name": "Outside", "email": "x@gmail.com", "role": "member", "dept": "TC"},
+              {"name": "Again", "email": "sam@totalchb.com", "role": "lead", "dept": "TC"},
+              {"name": "Ops Person", "email": "ops@totalchb.com", "role": "odd", "dept": "OPS"}]
+    rows = hub.team_rows(people, lambda m: m.endswith("@totalchb.com"))
+    assert rows == [
+        {"name": "Sample Boss", "email": "boss@totalchb.com", "role": "manager", "dept": "", "photo": link},
+        {"name": "Lee Lead", "email": "lee@totalchb.com", "role": "lead", "dept": "TC", "photo": jpeg},
+        {"name": "Sam Member", "email": "sam@totalchb.com", "role": "member", "dept": "TC", "photo": ""},
+        {"name": "Ops Person", "email": "ops@totalchb.com", "role": "member", "dept": "", "photo": ""}]
+
+
+def test_engine_team_follows_the_hub(monkeypatch):
+    from tests.conftest import firestore_store
+    from tests.test_engine import h, verify
+
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    from engine.main import Engine, create_app
+    from titleagent import demo
+
+    store = firestore_store()
+    store.set_setting("team", [{"name": "Pat Tc", "email": "pat.tc@totalchb.com", "role": "manager", "dept": ""}],
+                      by="test")
+    store.set_setting("admins", ["pat.tc@totalchb.com"], by="test")
+    answer = [{"name": "Sample Boss", "email": "boss@totalchb.com", "role": "manager", "dept": "", "photo": ""},
+              {"name": "Owner Lead", "email": "owner@totalchb.com", "role": "lead", "dept": "TC", "photo": ""},
+              {"name": "Pat Tc", "email": "pat.tc@totalchb.com", "role": "member", "dept": "TC", "photo": ""}]
+    asked = []
+    monkeypatch.setattr(hub, "team", lambda _s: asked.append(1) or answer)
+    client = TestClient(create_app(Engine(secrets=SECRETS, store=store, llm=demo.scripted_llm, verify=verify)))
+    me = client.get("/v1/me", headers=h("tc")).json()
+    assert me["role"] == "member" and not me["admin"] and me["team_from_hub"] is True  # the hub says Member now
+    s = store.get_settings()
+    assert [p["email"] for p in s["team"]] == ["boss@totalchb.com", "owner@totalchb.com", "pat.tc@totalchb.com"]
+    assert s["admins"] == ["boss@totalchb.com"] and s["tcs"] == ["Owner Lead", "Pat Tc"]
+    assert client.get("/v1/me", headers=h("owner")).json()["role"] == "lead"
+    assert len(asked) == 1  # read at most every 10 minutes
+    # with the hub connected, the team isn't changed here
+    team = [{"name": "Owner Lead", "email": "owner@totalchb.com", "role": "manager"}]
+    r = client.put("/v1/team", json={"people": team}, headers=h("tc"))
+    assert r.status_code == 403  # Pat isn't a manager any more
+    store.set_setting("admins", ["owner@totalchb.com"], by="test")
+    r = client.put("/v1/team", json={"people": team}, headers=h("owner"))
+    assert r.status_code == 409 and "Universal Team Hub" in r.json()["detail"]
+
+
+def test_engine_team_kept_when_the_hub_is_down_or_has_no_managers(monkeypatch):
+    from tests.conftest import firestore_store
+    from tests.test_engine import h, verify
+
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+
+    import engine.main as em
+    from engine.main import Engine, create_app
+    from titleagent import demo
+
+    store = firestore_store()
+    kept = [{"name": "Pat Tc", "email": "pat.tc@totalchb.com", "role": "manager", "dept": "", "photo": ""}]
+    store.set_setting("team", kept, by="test")
+    store.set_setting("admins", ["pat.tc@totalchb.com"], by="test")
+    client = TestClient(create_app(Engine(secrets=SECRETS, store=store, llm=demo.scripted_llm, verify=verify)))
+    assert client.get("/v1/me", headers=h("tc")).json()["admin"] is True  # unreachable (the stand-in): kept
+    monkeypatch.setattr(em, "TEAM_EVERY", 0)
+    monkeypatch.setattr(hub, "team", lambda _s: [{"name": "Lone", "email": "lone@totalchb.com", "role": "member"}])
+    assert client.get("/v1/me", headers=h("tc")).json()["admin"] is True  # no managers in the answer: kept
+    assert store.get_settings()["team"] == kept

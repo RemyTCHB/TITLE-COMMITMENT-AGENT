@@ -17,6 +17,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -37,6 +38,13 @@ from titleagent.models import STATUSES
 from titleagent.storage import open_store
 
 log = logging.getLogger("engine")
+TEAM_EVERY = 600  # seconds between reads of the hub's team (as TC Checklist's 10 minutes)
+
+
+def team_key(t) -> list:
+    """The same team? (Firestore hands fields back in its own order, so compare the values.)"""
+    return [[p.get("name"), p.get("email"), p.get("role"), p.get("dept") or "", p.get("photo") or ""]
+            for p in (t or [])]
 JOB_ID = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 
 
@@ -220,12 +228,42 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                if o.strip()]
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["*"], allow_headers=["*"],
                        expose_headers=["Content-Disposition", "X-Drive-Copy", "X-Drive-Note"])
-    state = {"engine": engine}
+    state = {"engine": engine, "team_at": 0.0}
 
     def eng() -> Engine:
         if state["engine"] is None:
             state["engine"] = default_engine()
         return state["engine"]
+
+    def save_team(e: Engine, people: list[dict], by: str):
+        """The team, the admins (the managers) and the TC list (everyone in TC, leaders first)."""
+        tc = [p for p in people if p["dept"] == "TC"]
+        e.store.set_setting("team", people, by=by)
+        e.store.set_setting("admins", [p["email"] for p in people if p["role"] == "manager"], by=by)
+        e.store.set_setting("tcs", [p["name"] for p in tc if p["role"] == "lead"]
+                            + [p["name"] for p in tc if p["role"] != "lead"], by=by)
+
+    def sync_team(e: Engine, force: bool = False) -> str:
+        """The team follows the Universal Team Hub (owner 2026-11-13): its Managers and TC department, read at most
+        every TEAM_EVERY seconds (on sign-in checks and the morning task) and saved only when something changed.
+        Unreachable hub or no managers in its answer: the team stays as it was. Logs counts only."""
+        if not e.secrets.has_hub or (not force and time.time() - state["team_at"] < TEAM_EVERY):
+            return "skipped"
+        state["team_at"] = time.time()
+        s = e.secrets
+        try:
+            rows = hub.team_rows(hub.team(s), lambda m: email_allowed(m, s.allowed_emails, s.allowed_domains))
+        except Exception as exc:
+            log.warning("team from the hub: %s", type(exc).__name__)
+            return "failed"
+        if not any(p["role"] == "manager" for p in rows):
+            log.warning("team from the hub: no managers in the answer, kept as it was")
+            return "failed"
+        if team_key(e.store.get_settings().get("team")) == team_key(rows):
+            return "same"
+        save_team(e, rows, by="Universal Team Hub")
+        log.info("team from the hub: %d people, %d managers", len(rows), sum(p["role"] == "manager" for p in rows))
+        return "changed"
 
     def user(authorization: str = Header(default=""), e: Engine = Depends(eng)) -> User:
         token = authorization.removeprefix("Bearer ").strip()
@@ -239,6 +277,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         s = e.secrets
         if not (claims.get("email_verified") and email_allowed(email, s.allowed_emails, s.allowed_domains)):
             raise HTTPException(403, f"{email or 'This account'} doesn't have access to the Title Commitment Agent.")
+        sync_team(e)
         settings = e.store.get_settings()
         admins = [a.strip().lower() for a in settings.get("admins", []) if a.strip()]
         is_admin = not admins or email in admins
@@ -332,7 +371,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     def me(u: User = Depends(user), e: Engine = Depends(eng)):
         owner = e.secrets.login_as_owner
         return {"email": u.email, "admin": u.admin, "role": u.role, "can": u.can, "imp": u.imp,
-                "login_as": bool(owner and u.email == owner and not u.imp and e.accounts)}
+                "login_as": bool(owner and u.email == owner and not u.imp and e.accounts),
+                "team_from_hub": e.secrets.has_hub}
 
     @app.post("/v1/presence")
     def presence(body: PresenceIn, u: User = Depends(user), e: Engine = Depends(eng)):
@@ -570,7 +610,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             log.warning("morning: the email failed: %s", type(exc).__name__)
             raise HTTPException(500, "The email service failed; the next try sends it.") from exc
         counts = daily.hub_catch_up(e.store, e.secrets, hub.APP_URL)
-        log.info("morning: email %s; hub %s", result, counts)
+        team = sync_team(e, force=True)
+        log.info("morning: email %s; hub %s; team %s", result, counts, team)
         return {"email": result, "message": message, "hub": counts}
 
     # ---- the Universal Team Hub: blockers ticked or unticked there (signed with HUB_SYNC_SECRET, no sign-in)
@@ -639,7 +680,11 @@ def create_app(engine: Engine | None = None) -> FastAPI:
 
     @app.put("/v1/team")
     def put_team(body: TeamIn, u: User = Depends(admin), e: Engine = Depends(eng)):
-        """The Team tab. Also sets who the admins are (the managers) and the TC list (everyone in TC, leaders first)."""
+        """The Team tab, only while the Team Hub isn't connected (local work, tests): once it is, the team follows the
+        hub (sync_team). Also sets who the admins are (the managers) and the TC list (everyone in TC, leaders first)."""
+        if e.secrets.has_hub:
+            raise HTTPException(409, "The team comes from the Universal Team Hub: change people there (photo → Team "
+                                     "Members). Changes show here within 10 minutes.")
         s, people, seen = e.secrets, [], set()
         for p in body.people:
             email = p.email.strip().lower()
@@ -658,11 +703,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         managers = [p["email"] for p in people if p["role"] == "manager"]
         if u.email not in managers:
             raise HTTPException(400, "Keep yourself a Manager: another manager can change your role.")
-        tc = [p for p in people if p["dept"] == "TC"]
-        e.store.set_setting("team", people, by=u.by)
-        e.store.set_setting("admins", managers, by=u.by)
-        e.store.set_setting("tcs", [p["name"] for p in tc if p["role"] == "lead"]
-                            + [p["name"] for p in tc if p["role"] != "lead"], by=u.by)
+        save_team(e, people, by=u.by)
         return {"ok": True}
 
     @app.post("/v1/google/check")
