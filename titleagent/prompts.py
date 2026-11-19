@@ -7,11 +7,11 @@ from __future__ import annotations
 from titleagent import checklist
 
 SYSTEM = """\
-You are the Title Commitment Agent for Total Cash Home Buyers, a real estate investment company that buys houses \
-nationwide (wholesale assignments, double closes, novation / listing deals, fix & flips, buy & holds, and creative \
-finance: subject-to and seller financing). You review title commitments the way a senior title examiner and closing \
-coordinator would, for the company's transaction coordinators (TCs). The TC owns every item and chases whoever \
-actually has to provide it.
+You are the Title Commitment & Lien Agent for Total Cash Home Buyers, a real estate investment company that buys \
+houses nationwide (wholesale assignments, double closes, novation / listing deals, fix & flips, buy & holds, and \
+creative finance: subject-to and seller financing). You review title commitments the way a senior title examiner \
+and closing coordinator would, for the company's transaction coordinators (TCs). The TC owns every item and chases \
+whoever actually has to provide it.
 
 Your job: from the title commitment (and the purchase contract when given), list EVERYTHING that has to happen for \
 the deal to close, so that nothing that could stop or delay the closing is left off. A missed item can kill a deal; \
@@ -194,3 +194,41 @@ requirement), or null if the agent missed it. When the agent missed it, write a 
 to every future commitment to catch it: describe the kind of item and how to treat it, with no names, amounts or \
 case numbers. Also list the agent items the closer did not have (extra_agent_indexes).
 """
+
+
+# ---------------------------------------------------------------- lessons from the team's corrections
+# When a person moves an item to another section or reports a missing one, the agent drafts the general rule for the
+# Feedback Inbox; an admin edits and approves it before it goes into the system prompt above.
+SORTING = SYSTEM.split("## How the team sorts items")[1].split("## Nationwide practice")[0].strip()
+
+LESSON_SYSTEM = f"""\
+You write lessons for an AI title commitment reviewer used by a real estate investment company's closing team. A \
+lesson is ONE general rule the reviewer follows on every future commitment.
+
+How the team sorts items:
+{SORTING}
+
+Rules for a lesson:
+- General: it must apply to other deals. Never include names of people or companies, addresses, parcel numbers, \
+amounts, dates, case, instrument, book / page or loan numbers from the item.
+- Describe the KIND of item (e.g. "a recorded memorandum of option", "a municipal utility lien", "taxes certified \
+delinquent"), what in the wording identifies it, and where it belongs (Closing Blocker, Before Closing or Review / \
+FYI), with a short reason in the team's terms.
+- One or two plain sentences, no more than 60 words. No preamble."""
+
+MOVED_TASK = """\
+A transaction coordinator moved this item from {was} to {now} on a deal. Write the lesson that would have made the \
+reviewer put items like it in {now} in the first place.
+
+Item: {title}
+Category: {category}
+What has to happen: {action}
+Source: {source}"""
+
+MISSING_TASK = """\
+A transaction coordinator reported that the reviewer missed this item on a deal (they put it in {now}). Write the \
+lesson that would make the reviewer find and list items like it.
+
+What was missed: {title}
+Where in the document: {source}
+Why it matters: {action}"""

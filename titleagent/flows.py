@@ -1,4 +1,5 @@
-"""The Title Commitment Agent's flows without any screen: read the documents, confirm and review, re-run, train, export.
+"""The Title Commitment & Lien Agent's flows without any screen: read the documents, confirm and review, re-run,
+train, export.
 The v2 engine (engine/main.py) runs these; `progress` gets a short line for the page to show while the agent works.
 `store` is a firestore_store.FirestoreStore (storage.open_store)."""
 
@@ -11,7 +12,14 @@ from datetime import date
 from titleagent import duedates, pipeline, prompts, training
 from titleagent.exports import INCLUDE, Checklist, checklist_for, document, tabular
 from titleagent.llm import LLM, Usage
-from titleagent.models import ActionItem, StructureOut
+from titleagent.models import (
+    LIEN_SEARCH,
+    MANUAL_ORIGINS,
+    PRIORITY_LABEL,
+    ActionItem,
+    LessonDraftOut,
+    StructureOut,
+)
 from titleagent.pdf import is_pdf
 
 Progress = Callable[[str], None] | None
@@ -203,3 +211,66 @@ def missing_item(store, deal_id: int, what: str, where: str, why: str, priority:
                           provided_by=provided_by or "Other", origin="feedback", sources=[{"ref": where or "Feedback"}])
         store.add_item(deal_id, item, by=by)
     return fid
+
+
+def lien_search_blocker(store, deal_id: int, what: str, action: str, provided_by: str, by: str) -> str:
+    """Add Lien Search Blocker: a Closing Blocker from the lien search, an outside task. No feedback and nothing for
+    the agent to learn; it stays through re-runs until cleared and goes to the Team Hub like any blocker."""
+    if not what.strip():
+        raise FlowError("Say what the lien search found.")
+    item = ActionItem(key=f"ls-{uuid.uuid4().hex[:8]}", priority="blocker", category="Money Liens & Judgments",
+                      title=what.strip()[:300], action=action.strip()[:2000] or "From the lien search.",
+                      provided_by=provided_by.strip()[:80] or "Other", origin="lien_search",
+                      sources=[{"ref": LIEN_SEARCH}])
+    store.add_item(deal_id, item, by=by)
+    return item.key
+
+
+def move_item(store, deal_id: int, item: ActionItem, to: str, by: str) -> int | None:
+    """Move an item to another section (Closing Blocker / Before Closing / Review). When it moves away from where the
+    agent put it, the Feedback Inbox gets one entry for the item (later moves update it; moving it back withdraws it),
+    for an admin to approve as a lesson. Items people added (Report Missing Item, Lien Search) teach nothing.
+    Returns the feedback id that needs a lesson drafted, or None."""
+    if to == item.priority:
+        return None
+    if item.origin in MANUAL_ORIGINS:
+        store.update_item(deal_id, item.key, by=by, priority=to)
+        return None
+    agent = item.moved_from or item.priority  # where the agent put it
+    store.update_item(deal_id, item.key, by=by, priority=to, moved_from=None if to == agent else agent)
+    pending = store.pending_feedback_for("moved", deal_id, item.key)
+    if to == agent:  # back where the agent had it: nothing to learn
+        for f in pending:
+            store.update_feedback(f["id"], status="withdrawn")
+        return None
+    source = next((f"{s.ref}: {s.quote[:300]}" if s.quote else s.ref for s in item.sources), "")
+    detail = {"from": agent, "to": to, "category": item.category, "action": item.action[:600], "source": source}
+    if pending:
+        store.update_feedback(pending[0]["id"], detail={**(pending[0].get("detail") or {}), **detail,
+                                                         "suggested_lesson": ""}, created_by=by)
+        return pending[0]["id"]
+    return store.add_feedback("moved", item.title, by=by, deal_id=deal_id, item_key=item.key, detail=detail)
+
+
+def draft_lesson(store, llm: LLM, feedback_id: int) -> None:
+    """The general rule for a moved or missing item, drafted by the agent for the admin to edit and approve (it never
+    goes live by itself). Best effort: without it the inbox suggests a plain starting point."""
+    f = store.get_feedback(feedback_id)
+    if not f or f.get("status") != "pending" or f.get("kind") not in ("moved", "missing"):
+        return
+    d = f.get("detail") or {}
+    if f["kind"] == "moved":
+        task = prompts.MOVED_TASK.format(was=PRIORITY_LABEL.get(d.get("from"), d.get("from")),
+                                         now=PRIORITY_LABEL.get(d.get("to"), d.get("to")), title=f["text"],
+                                         category=d.get("category", ""), action=d.get("action", ""),
+                                         source=d.get("source", ""))
+    else:
+        task = prompts.MISSING_TASK.format(now=PRIORITY_LABEL.get(d.get("priority"), "Closing Blocker"),
+                                           title=f["text"], source=d.get("where") or "not given",
+                                           action=d.get("why") or "not given")
+    out = llm.ask(step="lesson", system=prompts.LESSON_SYSTEM, docs=[], task=task, schema=LessonDraftOut,
+                  usage=Usage())
+    fresh = store.get_feedback(feedback_id) or {}
+    if fresh.get("status") == "pending" and (fresh.get("detail") or {}).get("to") == d.get("to"):
+        store.update_feedback(feedback_id,
+                              detail={**(fresh.get("detail") or {}), "suggested_lesson": out.lesson.strip()})

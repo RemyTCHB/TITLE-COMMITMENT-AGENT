@@ -1,11 +1,11 @@
 import csv
 import io
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from openpyxl import load_workbook
 
-from titleagent import demo, pipeline
+from titleagent import daily, demo, pipeline
 from titleagent.emailer import summary_html
 from titleagent.exports import Checklist, document, tabular
 from titleagent.llm import Usage
@@ -121,5 +121,16 @@ def test_daily_email_from_the_store(store):
     store.save_run(deal, analysis(), None, None, False, by="tc@x")
     subject, html = summary_html(store.list_deals(status="open"), store.open_items_by_deal(), date(2026, 10, 30),
                                  "https://title.totalchb.com")
-    assert "open Closing Blocker" in subject and "9 Sample Rd" in html and "Closing Nov 20 · 21d" in html
+    assert subject.startswith("Title Commitment & Lien Agent: ") and subject.endswith(" Overdue, 0 Cleared (Oct 29)")
+    assert "9 Sample Rd" in html and "Closing Nov 20 · 21d" in html
     assert "10 Sample Rd" in html and "No Open Blockers" in html and quiet
+    # a blocker cleared today is in tomorrow's email (owner 2026-11-19: Cleared replaces Due Soon); reopening drops it
+    blocker = next(i for i in store.get_items(deal) if i.priority == "blocker")
+    store.update_item(deal, blocker.key, by="tc@x", status="Cleared")
+    assert next(i for i in store.get_items(deal) if i.key == blocker.key).cleared_at
+    tomorrow = datetime.now(ZoneInfo("America/New_York")).date() + timedelta(days=1)
+    subject, html = daily.build(store, tomorrow, "https://title.totalchb.com")
+    assert ", 1 Cleared (" in subject and "Cleared " in html and blocker.title in html
+    store.update_item(deal, blocker.key, by="tc@x", status="Open")
+    assert next(i for i in store.get_items(deal) if i.key == blocker.key).cleared_at is None
+    assert ", 0 Cleared (" in daily.build(store, tomorrow, "")[0]

@@ -37,7 +37,7 @@ async function send(method, path, body, { raw = false } = {}) {
       body: body ? JSON.stringify(body) : undefined,
     });
   } catch {
-    throw new ApiError("Couldn't reach the Title Commitment Agent. Check your connection and try again.");
+    throw new ApiError("Couldn't reach the Title Commitment & Lien Agent. Check your connection and try again.");
   }
   if (!res.ok) {
     let detail = '';
@@ -61,6 +61,7 @@ export const api = {
   setItem: (dealId, body) => call('PATCH', `/v1/deals/${dealId}/items`, body),
   setDeal: (dealId, status) => call('PATCH', `/v1/deals/${dealId}`, { status }),
   missing: (dealId, body) => call('POST', `/v1/deals/${dealId}/missing`, body),
+  lienSearch: (dealId, body) => call('POST', `/v1/deals/${dealId}/lien-search`, body),
   itemFeedback: (dealId, body) => call('POST', `/v1/deals/${dealId}/feedback`, body),
   google: (dealId, kind, include) => call('POST', `/v1/deals/${dealId}/google`, { kind, include }),
   resolve: (id, approve, lesson) => call('POST', `/v1/feedback/${id}/resolve`, { approve, lesson }),

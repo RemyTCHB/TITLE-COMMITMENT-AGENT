@@ -24,7 +24,7 @@ from datetime import UTC, date, datetime
 from typing import Protocol
 
 from titleagent.config import DEFAULT_SETTINGS
-from titleagent.models import ActionItem, Analysis
+from titleagent.models import DONE_STATUSES, ActionItem, Analysis
 from titleagent.prompts import REVISED_SEED_LESSONS, SEED_LESSONS
 
 BATCH = 400  # Firestore allows 500 writes per batch
@@ -171,7 +171,7 @@ class FirestoreStore:
         if next(iter(lessons.limit(1).stream()), None) is not None:
             return
         for t in SEED_LESSONS:
-            self.add_lesson(t, source="seed", by="Title Commitment Agent", approved_by="Initial training set")
+            self.add_lesson(t, source="seed", by="Title Commitment & Lien Agent", approved_by="Initial training set")
 
     # ---- settings
     def get_settings(self) -> dict:
@@ -321,7 +321,14 @@ class FirestoreStore:
         snap = ref.get()
         if not snap.exists:
             return
-        ref.update({"data": {**snap.get("data"), **changes}, "updated_at": _now(), "updated_by": by})
+        old = snap.get("data")
+        if "status" in changes:  # when it was cleared, for the daily email's Cleared count
+            was, now = old.get("status") in DONE_STATUSES, changes["status"] in DONE_STATUSES
+            if now and not was:
+                changes["cleared_at"] = _now().isoformat()
+            elif was and not now:
+                changes["cleared_at"] = None
+        ref.update({"data": {**old, **changes}, "updated_at": _now(), "updated_by": by})
         self.db.document(f"deals/{deal_id}").update({"updated_at": _now()})
 
     def add_item(self, deal_id: int, item: ActionItem, by: str = "") -> None:
@@ -340,6 +347,20 @@ class FirestoreStore:
                 out[d["id"]] = items
         return out
 
+    def cleared_blockers(self, start: datetime, end: datetime) -> list[tuple[dict, ActionItem]]:
+        """Closing Blockers cleared (or waived) between start and end, with their deal (the daily email). Only deals
+        changed since start can have one (clearing an item touches its deal)."""
+        out = []
+        for d in self.list_deals():
+            at = d.get("updated_at")
+            if isinstance(at, datetime) and at < start:
+                continue
+            for i in self.get_items(d["id"]):
+                if (i.priority == "blocker" and i.status in DONE_STATUSES and i.cleared_at and i.change != "removed"
+                        and start <= datetime.fromisoformat(i.cleared_at) < end):
+                    out.append((d, i))
+        return out
+
     # ---- feedback and lessons
     def add_feedback(self, kind: str, text: str, by: str = "", deal_id: int | None = None,
                      item_key: str | None = None, detail: dict | None = None, feedback_id: int | None = None,
@@ -355,18 +376,38 @@ class FirestoreStore:
     def list_feedback(self, status: str | None = "pending") -> list[dict]:
         return self._sorted("feedback", reverse=True, **({"status": status} if status else {}))
 
+    def get_feedback(self, feedback_id: int) -> dict | None:
+        snap = self.db.document(f"feedback/{feedback_id}").get()
+        return snap.to_dict() if snap.exists else None
+
+    def update_feedback(self, feedback_id: int, **fields) -> None:
+        self.db.document(f"feedback/{feedback_id}").update(fields)
+
+    def pending_feedback_for(self, kind: str, deal_id: int, item_key: str) -> list[dict]:
+        return self._sorted("feedback", kind=kind, deal_id=deal_id, item_key=item_key, status="pending")
+
     def resolve_feedback(self, feedback_id: int, approve: bool, lesson_text: str = "", by: str = "") -> int | None:
-        lesson_id = self.add_lesson(lesson_text, source="feedback", by=by, approved_by=by) if approve else None
+        """An approved lesson keeps where it was learned (`ref`: the kind, the deal and the item), for Knowledge.
+        Only the lesson's text goes to the agent; the reference stays in the database."""
+        lesson_id = None
+        if approve:
+            f = self.get_feedback(feedback_id) or {}
+            d, deal = f.get("detail") or {}, self.get_deal(f["deal_id"]) if f.get("deal_id") else None
+            ref = {"kind": f.get("kind", ""), "item": f.get("text", ""), "deal_id": f.get("deal_id"),
+                   "address": (deal or {}).get("address", ""), "by": f.get("created_by", ""),
+                   **({"from": d["from"], "to": d["to"]} if d.get("from") and d.get("to") else {})}
+            lesson_id = self.add_lesson(lesson_text, source="feedback", by=by, approved_by=by, ref=ref)
         self.db.document(f"feedback/{feedback_id}").update({"status": "approved" if approve else "rejected",
                                                             "lesson_id": lesson_id})
         return lesson_id
 
     def add_lesson(self, text: str, source: str = "manual", by: str = "", approved_by: str = "",
-                   lesson_id: int | None = None, created_at: datetime | None = None, active: bool = True) -> int:
+                   lesson_id: int | None = None, created_at: datetime | None = None, active: bool = True,
+                   ref: dict | None = None) -> int:
         lesson_id = lesson_id or self._next_id("lessons")
         self.db.document(f"lessons/{lesson_id}").set({
             "id": lesson_id, "created_at": created_at or _now(), "created_by": by, "text": text.strip(),
-            "source": source, "active": active, "approved_by": approved_by or by})
+            "source": source, "active": active, "approved_by": approved_by or by, **({"ref": ref} if ref else {})})
         return lesson_id
 
     def list_lessons(self, active_only: bool = False) -> list[dict]:

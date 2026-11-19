@@ -1,17 +1,18 @@
-// Deals (home): every reviewed deal, newest first, with its open Closing Blockers and progress.
+// Deals (home): every reviewed deal, newest first, with its open Closing Blockers and how many are cleared.
 import { useMemo, useState } from 'preact/hooks';
 import { isOpen, useAllItems, useDeals } from '../data.js';
 import { go } from '../router.js';
 import { Bar, Icon, PageTitle, PinLine, Ring, Seg, Spinner, Stat, daysUntil, fmtDate } from '../ui.jsx';
 
 function DealCard({ d, items }) {
-  const live = (items || []).filter(i => i.change !== 'removed');
-  const blockers = live.filter(i => i.priority === 'blocker' && isOpen(i)).length;
-  const done = live.filter(i => !isOpen(i)).length;
-  const pct = live.length ? Math.round((100 * done) / live.length) : 0;
+  // Progress is the Closing Blockers (owner 2026-11-19): what's cleared of them, whatever else is still open.
+  const all = (items || []).filter(i => i.change !== 'removed' && i.priority === 'blocker');
+  const blockers = all.filter(isOpen).length;
+  const done = all.length - blockers;
+  const pct = all.length ? Math.round((100 * done) / all.length) : 100;
   const days = daysUntil(d.closing_date);
   const open = d.status === 'open';
-  const progress = open && items !== undefined && live.length > 0;
+  const progress = open && items !== undefined && (items || []).some(i => i.change !== 'removed');
   return (
     <a class="card deal-card" href={`#/deal/${d.id}`}>
       {progress && <Ring pct={pct} cls="ring-wide" />}
@@ -23,7 +24,7 @@ function DealCard({ d, items }) {
         </span>
         <div class="prog-line">
           {progress && <Ring pct={pct} cls="ring-phone" />}
-          {progress && <Bar done={done} total={live.length} what="Items Cleared" />}
+          {progress && all.length > 0 && <Bar done={done} total={all.length} what={all.length === 1 ? 'Closing Blocker Cleared' : 'Closing Blockers Cleared'} />}
           {!open ? <span class="chip">Closed</span>
             : items === undefined ? <Spinner />
               : blockers ? <span class="chip red"><span class="dot" />{blockers} blocker{blockers === 1 ? '' : 's'}</span>
@@ -56,7 +57,7 @@ export function Deals() {
   const closingSoon = open.filter(d => { const n = daysUntil(d.closing_date); return n !== null && n >= 0 && n <= 7; }).length;
   return (
     <>
-      <PageTitle>Title Commitment <span class="accent">Agent</span></PageTitle>
+      <PageTitle>Title Commitment &amp; Lien <span class="accent">Agent</span></PageTitle>
 
       <PinLine cls="tabs-line">
         <Seg label="Which deals" value={view} onChange={setView} options={[

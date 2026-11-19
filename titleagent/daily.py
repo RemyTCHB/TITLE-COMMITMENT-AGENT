@@ -12,7 +12,17 @@ from __future__ import annotations
 from datetime import datetime
 
 from titleagent import hub
-from titleagent.emailer import EASTERN, LAST_RUN, already_done, plan, run_record, send, summary_html
+from titleagent.emailer import (
+    EASTERN,
+    LAST_RUN,
+    already_done,
+    plan,
+    recipients_for,
+    run_record,
+    send,
+    summary_html,
+    window,
+)
 
 
 def send_summary(store, secrets, now: datetime, app_url: str, force: bool = False) -> tuple[str, str]:
@@ -32,11 +42,11 @@ def send_summary(store, secrets, now: datetime, app_url: str, force: bool = Fals
     if not secrets.resend_api_key:
         record("skipped", "RESEND_API_KEY is not set")
         return "skipped", "Skipped: RESEND_API_KEY is not set."
-    recipients = settings["email_recipients"]
+    recipients = recipients_for(settings)  # everyone on the team, plus Settings' extra addresses
     if not recipients:
-        record("skipped", "no recipients in Settings")
-        return "skipped", "Skipped: no recipients yet (app → Settings → Daily Email → Send To)."
-    subject, html = summary_html(store.list_deals(status="open"), store.open_items_by_deal(), day, app_url)
+        record("skipped", "no team yet")
+        return "skipped", "Skipped: no one on the team yet (it follows the Universal Team Hub)."
+    subject, html = build(store, day, app_url)
     try:
         send(secrets.resend_api_key, settings["email_from"], recipients, subject, html, deliver_at)
     except Exception as exc:
@@ -49,6 +59,13 @@ def send_summary(store, secrets, now: datetime, app_url: str, force: bool = Fals
     result = "test" if force else "sent"  # a test doesn't stand in for the day's email
     record(result, count)
     return result, f"Sent to {count}."
+
+
+def build(store, day, app_url: str) -> tuple[str, str]:
+    """(subject, html) for the day: the open deals' Closing Blockers and those cleared the day before."""
+    start, end, _ = window(day)
+    return summary_html(store.list_deals(status="open"), store.open_items_by_deal(), day, app_url,
+                        cleared=store.cleared_blockers(start, end))
 
 
 def hub_catch_up(store, secrets, app_url: str) -> dict:

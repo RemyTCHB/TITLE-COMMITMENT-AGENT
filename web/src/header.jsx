@@ -143,7 +143,7 @@ function Account({ user, me, onHelp, theme, setTheme, online, onOnline }) {
       </Menu>
       {leaving && (
         <Modal title="Sign Out?" onClose={() => setLeaving(false)}>
-          <p class="lede" style="font-size:15px">Sign out of the Title Commitment Agent on this device?</p>
+          <p class="lede" style="font-size:15px">Sign out of the Title Commitment & Lien Agent on this device?</p>
           <div class="actions">
             <button class="btn ghost pill" onClick={() => setLeaving(false)}>Cancel</button>
             <button class="btn primary pill" onClick={() => { setLeaving(false); (me?.imp ? Promise.resolve() : presenceOut()).finally(signOutNow); }}>Sign Out</button>
@@ -170,7 +170,7 @@ function ViewingAs({ user, me }) {
   };
   return (
     <div class="viewing-as" role="status">
-      <span>Viewing the Title Commitment Agent as <b>{them?.name || user.email}</b> ({user.email})</span>
+      <span>Viewing the Title Commitment & Lien Agent as <b>{them?.name || user.email}</b> ({user.email})</span>
       <button type="button" onClick={back} disabled={busy}>{busy ? <Spinner /> : null}
         {busy ? 'Switching Back…' : `Back To ${owner?.name?.split(' ')[0] || 'My Account'}`}</button>
     </div>
@@ -186,7 +186,7 @@ export function Header({ user, me, page, onHelp, compact, headRef }) {
     <header class={`header ${compact ? 'compact' : ''}`} ref={headRef}>
       <div class="header-row">
         <div class="head-left">
-          <a class="logo" href="#/" aria-label="Title Commitment Agent home">
+          <a class="logo" href="#/" aria-label="Title Commitment & Lien Agent home">
             <img class="lg-full" src={theme === 'dark' ? '/logo-full-white.png' : '/logo-full.png'} alt="Total Cash Home Buyers" />
             <img class="lg-mark" src="/logo-mark.png" alt="Total Cash Home Buyers" width="40" height="40" />
           </a>

@@ -51,7 +51,7 @@ export function Settings({ me, onHelp }) {
   const save = async () => {
     setBusy('save');
     try {
-      await api.putSettings({ email_recipients: f.email_recipients, permissions: f.permissions,
+      await api.putSettings({ email_recipients: others, permissions: f.permissions,
         email_from: f.email_from.trim(), due_offsets: f.due_offsets, google_folder_id: f.google_folder_id.trim() });
       toast('Saved.');
     } catch (e) { toast(e.message, true); } finally { setBusy(''); }
@@ -60,16 +60,18 @@ export function Settings({ me, onHelp }) {
     setBusy('check'); setCheck(null);
     try { setCheck(await api.googleCheck()); } catch (e) { setCheck({ ok: false, message: e.message }); } finally { setBusy(''); }
   };
+  // The daily email goes to everyone on the team (owner 2026-11-19; the team follows the Universal Team Hub), plus
+  // the extra addresses here. Only the extras are saved.
   const team = s.team || [];
-  const sends = email => f.email_recipients.includes(email);
-  const toggle = email => setF({ ...f, email_recipients: sends(email) ? f.email_recipients.filter(x => x !== email)
-    : [...f.email_recipients, email] });
+  const onTeam = email => team.some(p => p.email === email);
+  const others = f.email_recipients.filter(x => !onTeam(x));
+  const drop = email => setF({ ...f, email_recipients: f.email_recipients.filter(x => x !== email) });
   const addExtra = () => {
     const email = f.extra.trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return toast('Type a whole email address.', true);
-    setF({ ...f, extra: '', email_recipients: sends(email) ? f.email_recipients : [...f.email_recipients, email] });
+    if (onTeam(email)) return toast('They\'re on the team, so they already get it.');
+    setF({ ...f, extra: '', email_recipients: f.email_recipients.includes(email) ? f.email_recipients : [...f.email_recipients, email] });
   };
-  const others = f.email_recipients.filter(x => !team.some(p => p.email === x));
   const perm = (who, k) => !!f.permissions?.[who]?.[k];
   const setPerm = (who, k) => setF({ ...f, permissions: { ...f.permissions, [who]: { ...(f.permissions[who] || {}), [k]: !perm(who, k) } } });
   const [eValue, eSub, eCls] = emailStatus(s.email_last_run);
@@ -100,19 +102,19 @@ export function Settings({ me, onHelp }) {
 
         <section class="card" style="padding:24px;display:flex;flex-direction:column;gap:14px">
           <h2 style="font-size:20px;font-weight:800">Daily Email</h2>
-          <span class="row-sub">Weekdays at 8:00 AM Eastern: every open deal's open Closing Blockers.</span>
-          <div class="field"><span>Send To</span>
+          <span class="row-sub">Weekdays at 8:00 AM Eastern: every open deal's open Closing Blockers, how many are overdue,
+            and the Closing Blockers cleared the day before.</span>
+          <div class="field"><span>Send To: Everyone On The Team ({team.length}){others.length ? ` + ${others.length} More` : ''}</span>
             <div class="people-pick" role="group" aria-label="Send to">
               {team.map(p => (
-                <button key={p.email} type="button" class="person-chip" aria-pressed={sends(p.email)} title={p.email}
-                  onClick={() => toggle(p.email)}>
-                  <Avatar person={p} size={28} />{p.name}{sends(p.email) && <Icon name="check" size={14} stroke={3} />}
-                </button>))}
+                <span key={p.email} class="person-chip" aria-pressed="true" title={`${p.email}: on the team`}>
+                  <Avatar person={p} size={28} />{p.name}<Icon name="check" size={14} stroke={3} /></span>))}
               {others.map(x => (
                 <button key={x} type="button" class="person-chip" aria-pressed="true" title="Not on the team: click to remove"
-                  onClick={() => toggle(x)}><Avatar person={{ email: x }} size={28} />{x}<Icon name="x" size={14} /></button>))}
-              {!team.length && !others.length && <span class="row-sub">Save the team first (your photo → Team), then pick people here.</span>}
+                  onClick={() => drop(x)}><Avatar person={{ email: x }} size={28} />{x}<Icon name="x" size={14} /></button>))}
+              {!team.length && !others.length && <span class="row-sub">The team shows here once it comes from the Universal Team Hub.</span>}
             </div>
+            <p class="row-sub" style="margin:0">The team follows the Universal Team Hub: anyone added there gets the email from the next morning.</p>
             <div class="toolbar" style="margin-top:4px">
               <input class="input" style="flex:1 1 240px" placeholder="Someone not on the team? Their email" value={f.extra}
                 onInput={set('extra')} onKeyDown={e => e.key === 'Enter' && addExtra()} />

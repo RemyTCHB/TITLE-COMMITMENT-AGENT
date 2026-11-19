@@ -13,6 +13,7 @@ from titleagent.models import (
     CompareOut,
     DispositionOut,
     EntryOut,
+    LessonDraftOut,
     MatchOut,
     PolicyOut,
     ReviewOut,
@@ -170,4 +171,5 @@ def compare_answer() -> CompareOut:
 
 def scripted_llm() -> ScriptedLLM:
     return ScriptedLLM({"structure": structure(), "actions": actions(), "review": second_review(),
-                        "compare": compare_answer()})
+                        "compare": compare_answer(),
+                        "lesson": LessonDraftOut(lesson="A made-up general rule drafted for the Feedback Inbox.")})

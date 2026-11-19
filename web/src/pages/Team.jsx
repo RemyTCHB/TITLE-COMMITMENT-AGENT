@@ -174,7 +174,7 @@ export function Team({ me }) {
 
       {loginAs && (
         <Modal title={`Login As ${loginAs.name}?`} onClose={() => !switching && setLoginAs(null)}>
-          <p class="lede" style="font-size:15px">You will see and work in the Title Commitment Agent exactly as
+          <p class="lede" style="font-size:15px">You will see and work in the Title Commitment & Lien Agent exactly as
             {' '}{loginAs.name} does. Anything you change is logged as made for them via you. Use Back To at the top to
             come back.</p>
           <div class="actions">
@@ -184,7 +184,7 @@ export function Team({ me }) {
               try {
                 const { token } = await api.loginAs(loginAs.email);
                 await signInWithToken(token);
-                toast(`Now viewing the Title Commitment Agent as ${loginAs.name}.`);
+                toast(`Now viewing the Title Commitment & Lien Agent as ${loginAs.name}.`);
                 setLoginAs(null); go('');
               } catch (e) { toast(e.message, true); } finally { setSwitching(false); }
             }}>{switching ? <Spinner /> : <Icon name="users" />} Login As {loginAs.name.split(' ')[0]}</button>

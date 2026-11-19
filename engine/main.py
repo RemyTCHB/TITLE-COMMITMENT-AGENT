@@ -1,4 +1,4 @@
-"""Title Commitment Agent engine (v2, docs/PLAN-v2.md): the private service behind title.totalchb.com.
+"""Title Commitment & Lien Agent engine (v2, docs/PLAN-v2.md): the private service behind title.totalchb.com.
 
 It holds the AI key and runs everything that needs the server: reading commitments, reviews, training comparisons,
 exports, and every change to the data (the page reads Firestore live; the security rules keep it read-only). Every
@@ -176,6 +176,12 @@ class ItemPatch(BaseModel):
     due_date: str | None = Field(default=None, description="YYYY-MM-DD, or empty to clear (the time too)")
     due_time: str | None = Field(default=None, description="HH:MM, 24-hour Eastern, or empty for the day only")
     notes: str | None = None
+    priority: Literal["blocker", "before", "fyi"] | None = None  # move it to another section
+
+class LienIn(BaseModel):
+    what: str = Field(min_length=1, max_length=300)
+    action: str = Field(default="", max_length=2000)
+    provided_by: str = Field(default="Title Company / Attorney", max_length=80)
 
 class LoginAsIn(BaseModel):
     email: str = Field(min_length=3, max_length=120)
@@ -223,7 +229,7 @@ class LessonPatch(BaseModel):
 
 # ---------------------------------------------------------------- app
 def create_app(engine: Engine | None = None) -> FastAPI:
-    app = FastAPI(title="Title Commitment Agent engine", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="Title Commitment & Lien Agent engine", docs_url=None, redoc_url=None, openapi_url=None)
     origins = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "https://title.totalchb.com").split(",")
                if o.strip()]
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["*"], allow_headers=["*"],
@@ -276,7 +282,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         email = str(claims.get("email") or "").lower()
         s = e.secrets
         if not (claims.get("email_verified") and email_allowed(email, s.allowed_emails, s.allowed_domains)):
-            raise HTTPException(403, f"{email or 'This account'} doesn't have access to the Title Commitment Agent.")
+            raise HTTPException(403, f"{email or 'This account'} doesn't have access to the Title Commitment & Lien "
+                                     "Agent.")
         sync_team(e)
         settings = e.store.get_settings()
         admins = [a.strip().lower() for a in settings.get("admins", []) if a.strip()]
@@ -395,8 +402,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             raise HTTPException(400, "Which team member?")
         found = e.accounts.user_by_email(target)
         if not found:
-            raise HTTPException(404, "They haven't signed in to the Title Commitment Agent yet, so there is no account "
-                                     "to open.")
+            raise HTTPException(404, "They haven't signed in to the Title Commitment & Lien Agent yet, so there is no "
+                                     "account to open.")
         if found["disabled"]:
             raise HTTPException(403, "That account is turned off.")
         token = e.accounts.sign_in_token(found["uid"], {"imp": owner})
@@ -471,6 +478,16 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     def to_hub(bg: BackgroundTasks, e: Engine, deal_id: int) -> None:
         """The deal's Closing Blockers to the Universal Team Hub, after the response (titleagent/hub.py)."""
         bg.add_task(hub.safe_sync, e.store, e.secrets, deal_id)
+
+    def draft(bg: BackgroundTasks, e: Engine, feedback_id: int | None) -> None:
+        """The agent drafts the lesson for the Feedback Inbox, after the response (an admin approves it)."""
+        def run():
+            try:
+                flows.draft_lesson(e.store, e.llm(), feedback_id)
+            except Exception as exc:  # the inbox shows a plain starting point instead
+                log.warning("lesson draft failed: %s", type(exc).__name__)
+        if feedback_id:
+            bg.add_task(run)
 
     @app.post("/v1/review")
     def review(body: ReviewIn, bg: BackgroundTasks, u: User = Depends(user), e: Engine = Depends(eng)):
@@ -551,7 +568,21 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                                                  body.provided_by, u.by, body.add_to_list)}
         if body.add_to_list and body.priority == "blocker":
             to_hub(bg, e, deal_id)
+        draft(bg, e, out["feedback_id"])
         return out
+
+    @app.post("/v1/deals/{deal_id}/lien-search")
+    def lien_search(deal_id: int, body: LienIn, bg: BackgroundTasks, u: User = Depends(user),
+                    e: Engine = Depends(eng)):
+        """Add Lien Search Blocker (owner 2026-11-19): a Closing Blocker from the lien search, an outside task. Nothing
+        goes to the Feedback Inbox; the Team Hub gets it with the deal's other blockers."""
+        deal_or_404(e, deal_id)
+        try:
+            key = flows.lien_search_blocker(e.store, deal_id, body.what, body.action, body.provided_by, u.by)
+        except flows.FlowError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        to_hub(bg, e, deal_id)
+        return {"key": key}
 
     @app.patch("/v1/deals/{deal_id}")
     def set_deal(deal_id: int, body: DealPatch, u: User = Depends(user), e: Engine = Depends(eng)):
@@ -587,6 +618,12 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         if changes:
             e.store.update_item(deal_id, body.key, by=u.by, **changes)
             if item.priority == "blocker" and changes.keys() & {"status", "due_date", "due_time"}:
+                to_hub(bg, e, deal_id)
+        if body.priority and body.priority != item.priority:  # moved: the agent learns from it (Feedback Inbox)
+            if item.change == "removed":
+                raise HTTPException(400, "The title company removed this item.")
+            draft(bg, e, flows.move_item(e.store, deal_id, item, body.priority, u.by))
+            if "blocker" in (item.priority, body.priority):
                 to_hub(bg, e, deal_id)
         return {"ok": True}
 

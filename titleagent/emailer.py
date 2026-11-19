@@ -1,5 +1,6 @@
-"""The daily summary: every user gets one email each morning covering all open deals: open Closing Blockers and
-items due in the next 3 days (owner, 2026-10-25). Sent through Resend from the company domain."""
+"""The daily summary: everyone on the team gets one email each weekday morning covering all open deals: the open
+Closing Blockers, how many are overdue, and the Closing Blockers cleared the day before (owner 2026-10-25, updated
+2026-11-19). Sent through Resend from the company domain."""
 
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ def _open(items: list[ActionItem]) -> list[ActionItem]:
 # The app's look (web/src/styles.css: TCHB indigo / red / green, Baloo 2 headings, Nunito Sans text, white cards on a
 # soft grey page) in what email programs accept: tables and inline styles. Baloo 2 and Nunito Sans load where the
 # email program allows web fonts (Apple Mail, iPhone); elsewhere (Gmail, Outlook) Arial stands in.
-APP = "Title Commitment Agent"
+APP = "Title Commitment & Lien Agent"
 SITE = "https://title.totalchb.com"
 INDIGO, RED, GREEN, ORANGE = "#4D458A", "#BD2239", "#109648", "#B45309"
 INK, BODY, MUTED, LINE, PAGE = "#211E33", "#47445A", "#767388", "#EEEDF2", "#F7F7F9"
@@ -127,6 +128,46 @@ def _stat(value: int, label: str, color: str) -> str:
             f'<div style="{TEXT};font-size:12px;color:{MUTED};padding-top:4px">{escape(label)}</div></td>')
 
 
+def window(today: date) -> tuple[datetime, datetime, str]:
+    """The day before (Eastern): start, end and its label. On Mondays, Friday through Sunday ("Nov 14–16")."""
+    first = today - timedelta(days=3 if today.weekday() == 0 else 1)
+    last = today - timedelta(days=1)
+    start, end = (datetime.combine(d, time(0, 0), tzinfo=EASTERN) for d in (first, today))
+    if first == last:
+        label = f"{first:%b} {first.day}"
+    elif first.month == last.month:
+        label = f"{first:%b} {first.day}–{last.day}"
+    else:
+        label = f"{first:%b} {first.day}–{last:%b} {last.day}"
+    return start, end, label
+
+
+def recipients_for(settings: dict) -> list[str]:
+    """Everyone on the team (it follows the Universal Team Hub), plus anyone added in Settings → Daily Email."""
+    out: list[str] = []
+    for e in [p.get("email", "") for p in settings.get("team") or []] + list(settings.get("email_recipients") or []):
+        e = (e or "").strip().lower()
+        if e and e not in out:
+            out.append(e)
+    return out
+
+
+def _cleared(rows: list[tuple[dict, ActionItem]], base: str, label: str) -> str:
+    """The Closing Blockers cleared the day before, one line each with its deal."""
+    def line(d: dict, i: ActionItem) -> str:
+        name = escape(d.get("address") or f"Deal {d['id']}")
+        if base:
+            name = (f'<a href="{escape(base)}/#/deal/{d["id"]}" style="color:{INDIGO};text-decoration:none">'
+                    f"{name}</a>")
+        return (f'<tr><td width="16" valign="top" style="{TEXT};font-size:14px;color:{GREEN};padding:3px 0">&#10003;'
+                f'</td><td style="{TEXT};font-size:14px;line-height:1.4;color:{INK};padding:3px 0">'
+                f'{escape(i.title)}<span style="color:{MUTED}"> · {name}</span></td></tr>')
+    card = (f'<tr><td style="padding:14px 16px"><div style="{HEAD};font-size:17px;color:{GREEN};padding-bottom:6px">'
+            f"Cleared {escape(label)}</div>{_table(''.join(line(d, i) for d, i in rows))}</td></tr>")
+    return (f'<tr><td style="padding:0 0 12px">'
+            f'{_table(card, f"background:#ffffff;border:1px solid {LINE};border-radius:14px")}</td></tr>')
+
+
 def _note(text: str) -> str:
     return (f'<tr><td style="padding:8px 0 16px"><div style="{TEXT};font-size:15px;color:{BODY};'
             f'background:{GREEN_BG};border-radius:12px;padding:16px">{escape(text)}</div></td></tr>')
@@ -149,42 +190,44 @@ FONTS = ("https://fonts.googleapis.com/css2?family=Baloo+2:wght@700&amp;family=N
 
 
 def summary_html(deals: list[dict], items_by_deal: dict[int, list[ActionItem]], today: date,
-                 app_url: str = "") -> tuple[str, str]:
+                 app_url: str = "", cleared: list[tuple[dict, ActionItem]] | None = None) -> tuple[str, str]:
     """(subject, html): every open deal's open Closing Blockers, and nothing else (owner 2026-10-30), in the app's
-    design. Deals without open blockers are listed at the end, so every open deal shows."""
-    soon = (today + timedelta(days=SOON_DAYS)).isoformat()
+    design, then the Closing Blockers cleared the day before (owner 2026-11-19). Deals without open blockers are
+    listed at the end, so every open deal shows."""
     base = app_url.rstrip("/")
+    cleared = cleared or []
+    label = window(today)[2]
     cards, quiet = [], []
-    total = due_soon = overdue = 0
+    total = overdue = 0
     for d in deals:
         blockers = sorted((i for i in _open(items_by_deal.get(d["id"], [])) if i.priority == "blocker"),
                           key=lambda i: i.due_date or "9999")
         total += len(blockers)
         overdue += sum(1 for i in blockers if i.due_date and i.due_date < today.isoformat())
-        due_soon += sum(1 for i in blockers if i.due_date and today.isoformat() <= i.due_date <= soon)
         if blockers:
             cards.append(_deal(d, blockers, len(blockers), today, base))
         else:
             quiet.append(d)
     plural = "s" if total != 1 else ""
-    subject = f"{APP}: {total} open Closing Blocker{plural}" + (f", {overdue} overdue" if overdue else "") + \
-        f" ({today:%b %d})"
+    # owner 2026-11-19: "Title Commitment & Lien Agent: # Closing Blockers, # Overdue, # Cleared (yesterday's date)"
+    subject = f"{APP}: {total} Closing Blocker{plural}, {overdue} Overdue, {len(cleared)} Cleared ({label})"
     preheader = (f"{total} open Closing Blocker{plural} across {len(deals)} open deal{'s' if len(deals) != 1 else ''}"
-                 + (f" · {overdue} overdue" if overdue else "")
-                 + (f" · {due_soon} due in the next {SOON_DAYS} days" if due_soon else ""))
+                 + f" · {overdue} overdue · {len(cleared)} cleared {label}")
     if not deals:
         body = _note("No open deals today. Analyze a commitment to start one.")
     elif not cards:
         body = _note("No open Closing Blockers on any deal.")
     else:
         body = "".join(cards)
+    if cleared:
+        body += _cleared(cleared, base, label)
     if quiet:
         body += (f'<tr><td style="{HEAD};font-size:17px;color:{INDIGO};padding:4px 0 6px">No Open Blockers</td></tr>'
                  + "".join(_on_track(d, base) for d in quiet))
     stats = (_stat(len(deals), "Open Deals", INDIGO)
              + _stat(total, "Open Blockers", RED if total else GREEN)
-             + _stat(due_soon, "Due Soon", ORANGE if due_soon else GREEN)
-             + _stat(overdue, "Overdue", RED if overdue else GREEN))
+             + _stat(overdue, "Overdue", RED if overdue else GREEN)
+             + _stat(len(cleared), f"Cleared {label}", GREEN))
     header = _table(
         f'<tr><td><img src="{escape(base or SITE)}/logo-full.png" width="150" height="46" '
         f'alt="Total Cash Home Buyers" style="display:block;border:0"></td>'
@@ -193,11 +236,11 @@ def summary_html(deals: list[dict], items_by_deal: dict[int, list[ActionItem]], 
     hero = (f'<div style="{HEAD};font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:{RED}">'
             f"{today:%A}, {today:%B} {today.day}</div>"
             f'<div style="{HEAD};font-size:30px;line-height:1.2;color:{INDIGO};padding-top:4px">'
-            f'Title Commitment <span style="color:{RED}">Agent</span></div>'
+            f'Title Commitment &amp; Lien <span style="color:{RED}">Agent</span></div>'
             f'<div style="{TEXT};font-size:15px;color:{BODY};padding-top:6px">Every open deal\'s Closing Blockers: '
             f"what still stands between each deal and the closing table.</div>")
-    footer = (f"Sent weekdays at 8:00 AM Eastern to the team list in Settings. Closing Blockers are also in the "
-              f"Universal Team Hub.<br>Total Cash Home Buyers · {APP} · Internal use only")
+    footer = (f"Sent weekdays at 8:00 AM Eastern to everyone on the team. Closing Blockers are also in the "
+              f"Universal Team Hub.<br>Total Cash Home Buyers · {escape(APP)} · Internal use only")
     rows = (
         f'<tr><td style="background:#ffffff;border-radius:20px 20px 0 0;padding:18px 24px;'
         f'border-bottom:1px solid {LINE}">{header}</td></tr>'
@@ -206,7 +249,8 @@ def summary_html(deals: list[dict], items_by_deal: dict[int, list[ActionItem]], 
         f'<table role="presentation" width="100%" cellpadding="0" cellspacing="6" style="border-collapse:separate">'
         f"<tr>{stats}</tr></table></td></tr>"
         f'<tr><td style="background:#ffffff;padding:0 24px 10px;{TEXT};font-size:12px;color:{MUTED}">'
-        f"Due Soon: in the next {SOON_DAYS} days. Tap an address to open the deal.</td></tr>"
+        f"Cleared: Closing Blockers cleared {escape(label)}"
+        f"{' (Friday through Sunday)' if today.weekday() == 0 else ''}. Tap an address to open the deal.</td></tr>"
         f'<tr><td style="background:{INDIGO_BG};padding:16px 16px 6px">{_table(body)}</td></tr>'
         f'<tr><td align="center" style="background:#ffffff;border-radius:0 0 20px 20px;padding:20px 24px 26px">'
         f'{_button(f"{base}/" if base else SITE, f"Open The {APP}", INDIGO)}</td></tr>'
@@ -232,7 +276,7 @@ def send(api_key: str, sender: str, recipients: list[str], subject: str, html: s
     """Sends now, or hands the email to Resend to deliver at deliver_at."""
     if not recipients:
         raise ValueError("No recipients set (Settings → Daily email).")
-    body = {"from": f"Title Commitment Agent <{sender}>", "to": recipients, "subject": subject, "html": html}
+    body = {"from": f"{APP} <{sender}>", "to": recipients, "subject": subject, "html": html}
     if deliver_at:
         body["scheduled_at"] = deliver_at.isoformat()
     r = requests.post(RESEND_URL, headers={"Authorization": f"Bearer {api_key}"}, timeout=30, json=body)

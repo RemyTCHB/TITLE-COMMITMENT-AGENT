@@ -23,7 +23,7 @@ import { Training } from './pages/Training.jsx';
 function Gate({ error, busy, onSignIn }) {
   return (
     <section class="card gate">
-      <h2>Sign In To The Title Commitment <span class="accent">Agent</span></h2>
+      <h2>Sign In To The Title Commitment &amp; Lien <span class="accent">Agent</span></h2>
       <p>Every item needed to close, read from the title commitment. Sign in with your company Google account
         (@totalchb.com).</p>
       <button class="btn primary pill" onClick={onSignIn} disabled={busy}>

@@ -1,6 +1,7 @@
-# CLAUDE.md — Title Commitment Agent (Total Cash Home Buyers)
+# CLAUDE.md — Title Commitment & Lien Agent (Total Cash Home Buyers)
 
-Reviews title commitments and lists everything needed to close. Live at **title.totalchb.com** (since 2026-10-29):
+Reviews title commitments and lists everything needed to close (renamed from the Title Commitment Agent on
+2026-11-19; the Team Hub still tags its tasks "Title Commitment Agent", set in the hub). Live at **title.totalchb.com** (since 2026-10-29):
 the page in `web/` (Vercel, **the Universal Team Hub's design**: RemyTCHB/HUB's stylesheet and
 components), the engine in `engine/` + `titleagent/` (Cloud Run), data in Firebase (project `title-commitment-agent`).
 `docs/PLAN.md` holds the owner's decisions on the rules (section 0); `docs/PLAN-v2.md` how it runs. Keep this file in
@@ -13,7 +14,8 @@ sync when a rule changes. (The first Streamlit version and its Neon database wer
   copy them into tests, fixtures, prompts, lessons, logs or commit messages. Tests use `titleagent/demo.py`
   (made-up data). `*.pdf`, `.data/` and exports are gitignored. The repository and its Actions logs are public:
   scripts print counts, never deal details.
-- **Lessons are general rules** (no names, amounts, case numbers) and go live only after an admin approves them.
+- **Lessons are general rules** (no names, amounts, case numbers) and go live only after an admin approves them. The
+  agent may draft one (moved / missing items), but a person approves it; only the text ever goes to the agent.
 - Secrets only from environment variables (`titleagent/config.py`): Cloud Run gets them from GitHub secrets at deploy.
   Never in code or chat.
 - **Access**: only verified @totalchb.com Google accounts. The engine checks every request's Firebase ID token
@@ -31,6 +33,11 @@ sync when a rule changes. (The first Streamlit version and its Neon database wer
   copy of a quiet title judgment entry). Taxes become blockers only when sold or certified as a lien.
 - **Review / FYI** = standard exceptions and notes. A clean title has zero blockers.
 - The TC owns every item; `provided_by` is who actually has it.
+- **Lien Search Blocker** (owner 2026-11-19): a Closing Blocker a person adds from the lien search (Add Lien Search
+  Blocker, `origin` "lien_search"). An outside task: never in the Feedback Inbox, never a lesson; stays through
+  re-runs (never merged into what the agent finds) and goes to the Team Hub like any blocker.
+- Progress on the Deals cards is the share of Closing Blockers cleared (100% with none), whatever else is open
+  (owner 2026-11-19); the deal page's bar still counts every item.
 
 ## Code map
 - `titleagent/`: `pipeline.py` (steps), `prompts.py` (system prompt, seed lessons), `checklist.py`, `numbering.py`,
@@ -67,6 +74,13 @@ sync when a rule changes. (The first Streamlit version and its Neon database wer
   a one-time Firebase sign-in for them marked `imp`, `POST /v1/login-as/back` returns (only from such a sign-in). An
   orange bar shows whose view it is. Changes are recorded "<them> (via <owner>)" (`User.by`); each use goes to
   `audit/` (server only). The engine identity needs `scripts/login_as_setup.sh` once (Auth Viewer + Token Creator).
+- Moving an item (owner 2026-11-19; the arrows button, `PATCH /v1/deals/{id}/items` with `priority`,
+  `flows.move_item`): the person's section wins on re-runs until the agent agrees (`moved_from` keeps the agent's
+  pick, `compare.carry_over`). Moving one the agent placed makes one pending "moved" feedback per item (later moves
+  update it; moving back withdraws it); items people added just move. For moved and missing items the agent drafts
+  the general rule in the background (`flows.draft_lesson`, step "lesson", `prompts.LESSON_SYSTEM`) for the Feedback
+  Inbox; an approved lesson keeps `ref` (kind, item, deal, address, who, from / to) for Knowledge's "Learned from".
+  Learning comes from moves, missing items and manual lessons; Training only measures.
 - Permissions (`settings.permissions`, Settings): what Team Leaders and Members may do (`approve_lessons`,
   `report_missing`); Managers always can. The engine checks them (`allowed()` in `engine/main.py`); `/v1/me` returns
   `role` and `can` for the page.
@@ -77,7 +91,11 @@ sync when a rule changes. (The first Streamlit version and its Neon database wer
   `hub-sync.yml` runs by hand only; owner 2026-10-30: no 15-minute runs);
   the hub calls `POST /v1/hub/items`. Signed both ways with `HUB_SYNC_SECRET` (GitHub secret; the hub has the same
   value as `TITLE_AGENT_SYNC_SECRET`).
-- The 8:00 AM ET email (Closing Blockers only, owner 2026-10-30): Google Cloud Scheduler calls the engine
+- The 8:00 AM ET email (Closing Blockers only, owner 2026-10-30; owner 2026-11-19: to everyone on the team plus
+  Settings' extra addresses, `emailer.recipients_for`; subject "Title Commitment & Lien Agent: N Closing Blockers,
+  N Overdue, N Cleared (<the day before>)"; the stats Open Deals, Open Blockers, Overdue, Cleared; the blockers
+  cleared the day before listed, on Mondays Friday–Sunday, from items' `cleared_at`, set by `update_item`):
+  Google Cloud Scheduler calls the engine
   (`POST /v1/tasks/morning`, `titleagent/daily.py`, set up once with `scripts/scheduler_setup.sh`), which sends it via
   Resend; `scripts/daily_email.py` on GitHub Actions is only the later backup (GitHub runs late or skips).
 - Exports (owner 2026-10-30): every export is also saved in the team's Google Drive folder (Settings), in a folder

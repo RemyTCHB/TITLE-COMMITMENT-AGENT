@@ -12,11 +12,11 @@ import { useSettings } from '../data.js';
 import { Icon, Spinner, useToast, when } from '../ui.jsx';
 
 const GUIDES = {
-  member: { name: 'TC Guide', file: 'Title_Commitment_Agent_TC_Guide.pdf', for: 'for TCs',
+  member: { name: 'TC Guide', file: 'Title_Commitment_Lien_Agent_TC_Guide.pdf', for: 'for TCs',
     about: 'Reviewing commitments, working the list, exports, the Team Hub and the daily email.' },
-  lead: { name: 'Team Leader Guide', file: 'Title_Commitment_Agent_Team_Leader_Guide.pdf', for: 'for Team Leaders',
+  lead: { name: 'Team Leader Guide', file: 'Title_Commitment_Lien_Agent_Team_Leader_Guide.pdf', for: 'for Team Leaders',
     about: 'Ends with your departments\' delete passwords.' },
-  manager: { name: 'Manager Guide', file: 'Title_Commitment_Agent_Manager_Guide.pdf', for: 'for Managers',
+  manager: { name: 'Manager Guide', file: 'Title_Commitment_Lien_Agent_Manager_Guide.pdf', for: 'for Managers',
     about: 'Ends with every delete password.' },
 };
 const SHARE = { manager: ['manager', 'lead', 'member'], lead: ['lead', 'member'], member: ['member'] };
@@ -95,7 +95,7 @@ async function withPasswords(base, { role, who, pw, guide }) {
     : 'No departments are turned on for you in the Team Hub yet, so there are no passwords to show. Ask a manager.');
   y -= 14;
   para('Passwords are case-sensitive. Keep this page private: it is added only to your own copy, and only when you open or download it from Help.', fr, 9.5, MUTED, 13);
-  text(`Title Commitment Agent · ${guide} · Confidential`, M, 34, fb, 8, INDIGO);
+  text(`Title Commitment & Lien Agent · ${guide} · Confidential`, M, 34, fb, 8, INDIGO);
   text(String(doc.getPageCount()), W - M - 8, 34, fb, 8, RED);
   return doc.save();
 }
@@ -180,7 +180,7 @@ export function HelpPanel({ me, onClose }) {
           <div>
             <span class="eyebrow">Help</span>
             <h2>{GUIDES[role].name}</h2>
-            <p>Title Commitment Agent · {GUIDES[role].for}</p>
+            <p>Title Commitment & Lien Agent · {GUIDES[role].for}</p>
           </div>
           <button class="guide-close" onClick={onClose} title="Close" aria-label="Close"><Icon name="x" /></button>
         </div>

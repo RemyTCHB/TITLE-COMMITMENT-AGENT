@@ -143,6 +143,10 @@ class ActionsOut(BaseModel):
     checklist_findings: list[str] = Field(description="Professional checklist checks that found something, by name")
 
 
+class LessonDraftOut(BaseModel):
+    lesson: str = Field(description="One general rule, no names, addresses, amounts or numbers from the deal")
+
+
 class ReviewOut(BaseModel):
     missing_items: list[ActionItemOut]
     corrections: list[str] = Field(description="Items on the list that look wrong, with the reason")
@@ -186,10 +190,17 @@ class ActionItem(BaseModel):
     due_time: str | None = None  # "HH:MM", 24-hour Eastern, from the due date picker; None = the day only
     why: str = ""
     sources: list[Source] = []
-    origin: Literal["commitment", "checklist", "contract", "review", "feedback"] = "commitment"
+    # feedback: Report Missing Item; lien_search: Add Lien Search Blocker (an outside task, nothing to learn from)
+    origin: Literal["commitment", "checklist", "contract", "review", "feedback", "lien_search"] = "commitment"
     status: str = "Open"
     notes: str = ""
     change: Literal["", "new", "removed"] = ""  # vs the previous commitment for this deal
+    moved_from: Priority | None = None  # the agent's priority, when a person moved the item (theirs wins on re-runs)
+    cleared_at: str | None = None  # when it was last Cleared / Waived (UTC ISO), for the daily email
+
+
+LIEN_SEARCH = "Lien Search Blocker"
+MANUAL_ORIGINS = {"feedback", "lien_search"}  # items people added: they stay through re-runs until cleared
 
 
 def time_text(hhmm: str | None) -> str:

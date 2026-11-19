@@ -371,3 +371,53 @@ def test_who_is_online_checks_in_through_the_engine():
                                                            merge=True)
     client.post("/v1/presence", json={"device": "dphone1", "type": "Mobile"}, headers=h("tc"))
     assert set(store.db.document("presence/pat.tc@totalchb.com").get().to_dict()["sessions"]) == {"dphone1"}
+
+
+def test_moving_an_item_teaches_the_agent_and_lien_search_blockers_dont():
+    """Owner 2026-11-19: moving an item the agent placed puts one entry in the Feedback Inbox with a drafted general
+    rule (moving it back withdraws it); the approved lesson keeps where it was learned. Lien Search Blockers are
+    Closing Blockers for the Team Hub that teach nothing."""
+    from tests.conftest import firestore_store
+    from titleagent import hub
+    from titleagent.models import ActionItem, Source
+
+    store = firestore_store()
+    client = TestClient(create_app(Engine(secrets=Secrets(None, None, None), store=store, llm=demo.scripted_llm,
+                                          verify=verify)))
+    deal_id = store.create_deal(by="pat.tc@totalchb.com", address="3 Sample Way, Exampleton, OH")
+    store.replace_items(deal_id, [ActionItem(key="opt", priority="fyi", category="Recording & Curative",
+                                             title="Memorandum of option, made-up", action="Terminate it of record",
+                                             provided_by="Seller", sources=[Source(ref="B-II 9", quote="Memorandum")])])
+    mine = lambda: [f for f in store.list_feedback() if f.get("deal_id") == deal_id]  # noqa: E731
+    r = client.patch(f"/v1/deals/{deal_id}/items", headers=h("tc"), json={"key": "opt", "priority": "before"})
+    assert r.status_code == 200
+    r = client.patch(f"/v1/deals/{deal_id}/items", headers=h("tc"), json={"key": "opt", "priority": "blocker"})
+    item = store.get_items(deal_id)[0]
+    assert (item.priority, item.moved_from) == ("blocker", "fyi")
+    [f] = mine()  # one entry per item, following the latest move, with the agent's draft
+    assert (f["kind"], f["detail"]["from"], f["detail"]["to"]) == ("moved", "fyi", "blocker")
+    assert f["detail"]["suggested_lesson"] == "A made-up general rule drafted for the Feedback Inbox."
+    assert [p["key"] for p in hub.payload(store, deal_id)["blockers"]] == ["opt"]  # now a blocker for the hub
+    # back to the agent's section: withdrawn, nothing to learn
+    client.patch(f"/v1/deals/{deal_id}/items", headers=h("tc"), json={"key": "opt", "priority": "fyi"})
+    assert store.get_items(deal_id)[0].moved_from is None and mine() == []
+    # moved again and approved: the lesson says where it was learned (the agent only ever gets the text)
+    client.patch(f"/v1/deals/{deal_id}/items", headers=h("tc"), json={"key": "opt", "priority": "blocker"})
+    [f] = mine()
+    r = client.post(f"/v1/feedback/{f['id']}/resolve", headers=h("tc"),
+                    json={"approve": True, "lesson": "Recorded memoranda of option are Closing Blockers."})
+    lesson = next(x for x in store.list_lessons() if x["id"] == r.json()["lesson_id"])
+    assert lesson["ref"] == {"kind": "moved", "item": "Memorandum of option, made-up", "deal_id": deal_id,
+                             "address": "3 Sample Way, Exampleton, OH", "by": "pat.tc@totalchb.com",
+                             "from": "fyi", "to": "blocker"}
+    # a Lien Search Blocker: a Closing Blocker for the hub, nothing in the Feedback Inbox
+    before = len(store.list_feedback(status=None))
+    assert client.post(f"/v1/deals/{deal_id}/lien-search", headers=h("tc"), json={"what": ""}).status_code == 422
+    r = client.post(f"/v1/deals/{deal_id}/lien-search", headers=h("tc"),
+                    json={"what": "Made-up code enforcement lien", "action": "Payoff and release"})
+    key = r.json()["key"]
+    lien = next(i for i in store.get_items(deal_id) if i.key == key)
+    assert (lien.priority, lien.origin, lien.sources[0].ref) == ("blocker", "lien_search", "Lien Search Blocker")
+    assert key in [p["key"] for p in hub.payload(store, deal_id)["blockers"]]
+    client.patch(f"/v1/deals/{deal_id}/items", headers=h("tc"), json={"key": key, "priority": "before"})
+    assert len(store.list_feedback(status=None)) == before  # moving it teaches nothing either

@@ -11,7 +11,7 @@ import re
 from difflib import SequenceMatcher
 
 from titleagent.grounding import norm
-from titleagent.models import ActionItem
+from titleagent.models import MANUAL_ORIGINS, ActionItem
 
 MATCH_AT = 0.62
 
@@ -34,7 +34,9 @@ def similarity(a: ActionItem, b: ActionItem) -> float:
 def carry_over(new: list[ActionItem], previous: list[ActionItem], mark_changes: bool) -> list[ActionItem]:
     """New items take the key, status and notes of their best previous match. With mark_changes (an updated
     commitment), unmatched new items are "new" and unmatched open previous items come back as "removed"."""
-    prev = [p for p in previous if p.change != "removed"]
+    # Lien Search Blockers are outside tasks: never merged into what the agent finds (they're added back below)
+    prev = [p for p in previous if p.change != "removed" and p.origin != "lien_search"]
+    lien = [p for p in previous if p.origin == "lien_search" and p.change != "removed"]
     pairs = sorted(((similarity(n, p), i, j) for i, n in enumerate(new) for j, p in enumerate(prev)), reverse=True)
     taken_new: dict[int, int] = {}
     taken_prev: set[int] = set()
@@ -51,7 +53,11 @@ def carry_over(new: list[ActionItem], previous: list[ActionItem], mark_changes: 
     for i, n in enumerate(new):
         if i in taken_new:
             p = prev[taken_new[i]]
-            item = n.model_copy(update={"key": p.key, "status": p.status, "notes": p.notes, "change": ""})
+            keep = {"key": p.key, "status": p.status, "notes": p.notes, "change": "", "cleared_at": p.cleared_at}
+            if p.moved_from and n.priority != p.priority:  # a person moved it: their section stays until the agent
+                # agrees (it learns from the Feedback Inbox)
+                keep |= {"priority": p.priority, "moved_from": p.moved_from}
+            item = n.model_copy(update=keep)
         else:
             item = n.model_copy(update={"key": n.key or make_key(n), "change": "new" if mark_changes else ""})
         while item.key in used_keys:
@@ -62,8 +68,13 @@ def carry_over(new: list[ActionItem], previous: list[ActionItem], mark_changes: 
     for j, p in enumerate(prev):
         if j in taken_prev:
             continue
-        if p.origin == "feedback":  # an item a person added stays until they clear it
+        if p.origin in MANUAL_ORIGINS:  # an item a person added stays until they clear it
             out.append(p)
         elif mark_changes:
             out.append(p.model_copy(update={"change": "removed"}))
+    for p in lien:
+        while p.key in used_keys:
+            p = p.model_copy(update={"key": p.key + "x"})
+        used_keys.add(p.key)
+        out.append(p)
     return out

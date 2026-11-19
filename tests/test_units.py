@@ -3,7 +3,17 @@ from datetime import UTC, date, datetime
 from titleagent.compare import carry_over
 from titleagent.config import _decode_service_account
 from titleagent.duedates import due_date
-from titleagent.emailer import EASTERN, already_done, plan, run_record, run_status, send, summary_html
+from titleagent.emailer import (
+    EASTERN,
+    already_done,
+    plan,
+    recipients_for,
+    run_record,
+    run_status,
+    send,
+    summary_html,
+    window,
+)
 from titleagent.exports.google import check_folder, folder_id_from
 from titleagent.grounding import found_on, verify
 from titleagent.models import ActionItem, Source
@@ -67,7 +77,7 @@ def test_daily_email_lists_only_closing_blockers():
     items = {1: [item("Mortgage payoff"), item("Deed", priority="before", due="2026-10-26"),
                  item("Cleared lien", status="Cleared"), item("Later doc", priority="before", due="2026-12-01")]}
     subject, html = summary_html(deals, items, date(2026, 10, 25))
-    assert subject == "Title Commitment Agent: 1 open Closing Blocker (Oct 25)"
+    assert subject == "Title Commitment & Lien Agent: 1 Closing Blocker, 0 Overdue, 0 Cleared (Oct 24)"
     assert "Mortgage payoff" in html  # owner 2026-10-30: Closing Blockers only, even when other items are due
     assert "Deed" not in html and "Cleared lien" not in html and "Later doc" not in html
 
@@ -308,7 +318,7 @@ def test_help_links_the_guides_the_builder_makes():
     root = Path(__file__).resolve().parent.parent
     help_page = (root / "web" / "src" / "pages" / "Help.jsx").read_text(encoding="utf-8")
     linked = set(re.findall(r"file: '([^']+\.pdf)'", help_page))
-    built = set(re.findall(r'"(Title_Commitment_Agent_\w+\.pdf)"', (root / "docs" / "guide" / "build_guide.py")
+    built = set(re.findall(r'"(Title_Commitment_Lien_Agent_\w+\.pdf)"', (root / "docs" / "guide" / "build_guide.py")
                            .read_text(encoding="utf-8")))
     assert len(linked) == 3 and linked == built
     assert all((root / "web" / "public" / "guides" / f).is_file() for f in linked)
@@ -321,3 +331,47 @@ def test_help_links_the_guides_the_builder_makes():
     assert ["data-hub-pw" in guides[r]["html"] for r in ("member", "lead", "manager")] == [False, True, True]
     pictures = set(re.findall(r'src="/guides/img/([^"]+)"', "".join(g["html"] for g in guides.values())))
     assert pictures and all((root / "web" / "public" / "guides" / "img" / f).is_file() for f in pictures)
+
+
+def test_daily_email_overdue_and_cleared_the_day_before():
+    """Owner 2026-11-19: the subject "<app>: # Closing Blockers, # Overdue, # Cleared (<the day before>)"; Overdue
+    takes Due Soon's place and Cleared (the Closing Blockers cleared the day before) the last."""
+    deals = [{"id": 1, "address": "1 Sample St", "deal_type": "Wholesale (Assignment)", "closing_date": None,
+              "tc": "Pat"}]
+    items = {1: [item("Mortgage payoff", due="2026-11-17"), item("Tax lien", due="2026-11-30")]}
+    done = item("Made-up judgment release", status="Cleared")
+    subject, html = summary_html(deals, items, date(2026, 11, 19), "https://title.totalchb.com",
+                                 cleared=[(deals[0], done)])
+    assert subject == "Title Commitment & Lien Agent: 2 Closing Blockers, 1 Overdue, 1 Cleared (Nov 18)"
+    assert "Due Soon" not in html and html.index(">Overdue<") < html.index(">Cleared Nov 18<")
+    assert "Made-up judgment release" in html and "Title Commitment &amp; Lien" in html
+    # Mondays cover Friday through Sunday
+    assert window(date(2026, 11, 23))[2] == "Nov 20–22" and window(date(2026, 11, 19))[2] == "Nov 18"
+    assert window(date(2026, 12, 1))[2] == "Nov 30" and window(date(2026, 11, 2))[2] == "Oct 30–Nov 1"
+    start, end, _ = window(date(2026, 11, 19))
+    assert (start.isoformat(), end.isoformat()) == ("2026-11-18T00:00:00-05:00", "2026-11-19T00:00:00-05:00")
+
+
+def test_daily_email_goes_to_everyone_on_the_team():
+    """Owner 2026-11-19: everyone on the team (it follows the hub), plus Settings' extra addresses, once each."""
+    settings = {"team": [{"email": "Pat@totalchb.com"}, {"email": "sam@totalchb.com"}],
+                "email_recipients": ["sam@totalchb.com", "closer@example.com"]}
+    assert recipients_for(settings) == ["pat@totalchb.com", "sam@totalchb.com", "closer@example.com"]
+    assert recipients_for({"team": [], "email_recipients": []}) == []
+
+
+def test_reruns_keep_a_persons_section_and_lien_search_blockers():
+    """Owner 2026-11-19: a moved item stays where the person put it on re-runs (until the agent agrees); Lien Search
+    Blockers are never merged into what the agent finds; when an item was cleared carries over."""
+    moved = item("Memorandum of option to Example Co", "Memorandum of Option", priority="blocker", key="m1",
+                 status="Cleared")
+    moved = moved.model_copy(update={"moved_from": "fyi", "cleared_at": "2026-11-18T15:00:00+00:00"})
+    lien = item("Open mortgage to First Example Bank", key="ls-1", origin="lien_search")
+    new = [item("Memorandum of option to Example Co", "Memorandum of Option", priority="fyi"),
+           item("Open mortgage to First Example Bank", "release of Mortgage")]
+    out = carry_over(new, [moved, lien], mark_changes=False)
+    m = next(i for i in out if i.key == "m1")
+    assert (m.priority, m.moved_from, m.cleared_at) == ("blocker", "fyi", "2026-11-18T15:00:00+00:00")
+    assert [i.origin for i in out if i.title.startswith("Open mortgage")] == ["commitment", "lien_search"]
+    agrees = carry_over([new[0].model_copy(update={"priority": "blocker"})], [moved], mark_changes=False)[0]
+    assert (agrees.priority, agrees.moved_from) == ("blocker", None)

@@ -22,8 +22,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from titleagent.config import load_secrets  # noqa: E402
-from titleagent.daily import send_summary  # noqa: E402
-from titleagent.emailer import EASTERN, summary_html  # noqa: E402
+from titleagent.daily import build, send_summary  # noqa: E402
+from titleagent.emailer import EASTERN, recipients_for  # noqa: E402
 from titleagent.storage import open_store  # noqa: E402
 
 
@@ -36,8 +36,7 @@ def main() -> int:
     settings = store.get_settings()
     now = datetime.now(UTC)
     day = now.astimezone(EASTERN).date()
-    subject, html = summary_html(store.list_deals(status="open"), store.open_items_by_deal(), day,
-                                 os.environ.get("APP_URL", ""))
+    subject, html = build(store, day, os.environ.get("APP_URL", ""))
     if "--dry-run" in sys.argv:
         print(subject)
         print(html)
@@ -47,7 +46,7 @@ def main() -> int:
         base = os.environ.get("APP_URL", "").rstrip("/") or "(APP_URL not set)"
         print(f"Data: {source} · open deals: {len(store.list_deals(status='open'))} · "
               f"links: {base}/#/deal/<id> · "
-              f"recipients: {len(settings['email_recipients'])} · Resend key set: {bool(secrets.resend_api_key)}")
+              f"recipients: {len(recipients_for(settings))} · Resend key set: {bool(secrets.resend_api_key)}")
         return 0
 
     _, message = send_summary(store, secrets, now, os.environ.get("APP_URL", ""), force="--now" in sys.argv)

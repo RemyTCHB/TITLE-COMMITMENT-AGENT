@@ -7,7 +7,9 @@ import { useReference } from '../data.js';
 import { db } from '../firebase.js';
 import { Icon, PageTitle, Spinner, useToast, when } from '../ui.jsx';
 
-const KIND = { missing: 'Missing Item', not_needed: 'Not Needed', wrong: 'Wrong Info', training: 'Training Gap' };
+const KIND = { missing: 'Missing Item', not_needed: 'Not Needed', wrong: 'Wrong Info', training: 'Training Gap',
+  moved: 'Moved Section' };
+const SECTION = { blocker: 'Closing Blocker', before: 'Before Closing', fyi: 'Review / FYI' };
 
 function useCol(name) {
   const [rows, setRows] = useState(undefined);
@@ -21,14 +23,17 @@ function suggested(f) {
   if (d.suggested_lesson) return d.suggested_lesson;
   if (f.kind === 'missing') return `On every commitment, check for: ${f.text}. ${d.why || ''}`.trim();
   if (f.kind === 'not_needed') return `Do not list this as an action item when it appears: ${f.text}`;
+  if (f.kind === 'moved') return `Items like "${f.text}" are ${SECTION[d.to]}, not ${SECTION[d.from]}.`;
   return f.text;
 }
 
 function InboxCard({ f, admin }) {
   const toast = useToast();
   const [text, setText] = useState(suggested(f));
+  const [edited, setEdited] = useState(false);
   const [busy, setBusy] = useState('');
   const d = f.detail || {};
+  useEffect(() => { if (!edited) setText(suggested(f)); }, [d.suggested_lesson, d.to]);  // the agent's draft arrives
   const act = async approve => {
     setBusy(approve ? 'yes' : 'no');
     try { await api.resolve(f.id, approve, text); toast(approve ? 'Lesson approved: it applies from the next review.' : 'Rejected.'); }
@@ -42,9 +47,12 @@ function InboxCard({ f, admin }) {
           {f.deal_id && <a href={`#/deal/${f.deal_id}`}>deal</a>}{d.where ? ` · ${d.where}` : ''}</span>
       </div>
       <span class="row-title">{f.text}</span>
+      {f.kind === 'moved' && <span class="row-sub">Moved from <b>{SECTION[d.from]}</b> to <b>{SECTION[d.to]}</b>
+        {d.source ? ` · ${d.source.split(':')[0]}` : ''}</span>}
       {d.why && <span class="row-sub">{d.why}</span>}
+      {['moved', 'missing'].includes(f.kind) && !d.suggested_lesson && <span class="row-sub"><Spinner /> The agent is drafting the lesson…</span>}
       <label class="field"><span>Lesson The Agent Will Follow</span>
-        <textarea class="input" rows={3} value={text} disabled={!admin} onInput={e => setText(e.currentTarget.value)} /></label>
+        <textarea class="input" rows={3} value={text} disabled={!admin} onInput={e => { setText(e.currentTarget.value); setEdited(true); }} /></label>
       <p class="row-sub" style="margin:0">Write it as a general rule: no names, addresses, amounts or case numbers from one deal.</p>
       {admin && (
         <div class="toolbar">
@@ -53,6 +61,17 @@ function InboxCard({ f, admin }) {
           <button class="btn ghost pill sm" disabled={!!busy} onClick={() => act(false)}>Reject</button>
         </div>)}
     </article>
+  );
+}
+
+// Where an approved lesson was learned (the Feedback Inbox entry it came from): only shown here, never sent to the agent.
+function LearnedFrom({ r }) {
+  const what = r.kind === 'moved' ? `${r.by || 'Someone'} moved "${r.item}" from ${SECTION[r.from]} to ${SECTION[r.to]}`
+    : r.kind === 'missing' ? `${r.by || 'Someone'} reported "${r.item}" missing`
+      : r.kind === 'training' ? `Training: the agent missed "${r.item}"` : `Feedback on "${r.item}"`;
+  return (
+    <span class="row-sub learned"><Icon name="book" size={13} /> Learned from: {what}
+      {r.deal_id ? <> on <a href={`#/deal/${r.deal_id}`}>{r.address || `deal ${r.deal_id}`}</a></> : ''}</span>
   );
 }
 
@@ -67,6 +86,7 @@ function LessonRow({ x, admin }) {
         <span style="font-size:15px;color:var(--text-body)">{x.text}</span>
         <span class="row-sub" style="font-size:13px">{(x.source || '').replace(/^./, c => c.toUpperCase())} · {x.created_by}
           {' · '}{when(x.created_at)}{x.approved_by ? ` · approved by ${x.approved_by}` : ''}</span>
+        {x.ref && <LearnedFrom r={x.ref} />}
       </div>
       <button class="switch" role="switch" aria-checked={!!x.active} aria-label={x.active ? 'Turn this lesson off' : 'Turn this lesson on'}
         disabled={!admin} onClick={flip} title={admin ? '' : 'Lessons are changed by the people Settings → Permissions allows'} />
@@ -108,7 +128,7 @@ export function Knowledge({ me }) {
           <small>{inbox.length ? 'needs approving' : 'inbox is empty'}</small></div>
       </div>
 
-      <div class="section-head"><h2>Feedback Inbox</h2><p>From Report Missing Item, item feedback and training gaps.</p></div>
+      <div class="section-head"><h2>Feedback Inbox</h2><p>From items moved to another section, Report Missing Item, item feedback and training gaps. The agent drafts each lesson; approve it to use it from the next review.</p></div>
       {feedback === undefined ? <Spinner /> : inbox.length ? (
         <div class="list">{inbox.map(f => <InboxCard key={f.id} f={f} admin={admin} />)}</div>
       ) : <div class="note green">Inbox is empty. Every piece of feedback has been reviewed.</div>}

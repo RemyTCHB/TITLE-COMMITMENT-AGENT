@@ -15,9 +15,29 @@ const PRI_CHIP = { blocker: 'red', before: 'orange', fyi: '' };
 const GROUP = { blocker: 'Closing Blockers', before: 'Before Closing', fyi: 'Review / FYI' };
 
 // ---------------------------------------------------------------- one item
+// Move an item to another section (owner 2026-11-19). Moving one the agent placed sends it to the Feedback Inbox, where
+// an admin approves the general rule it drafts; items people added (missing, lien search) just move.
+function MoveMenu({ menu, item, onMove }) {
+  const learns = !['feedback', 'lien_search'].includes(item.origin);
+  return (
+    <Menu menu={menu} label="Move to another section">
+      <div class="label">Move To</div>
+      {PRIORITY_ORDER.map(p => (
+        <button key={p} role="menuitemradio" aria-selected={p === item.priority} disabled={p === item.priority}
+          onClick={() => onMove(p)}>
+          <span class={`dot-p p-${p}`} />{PRIORITY[p]}{p === item.priority && <span class="menu-note">Now</span>}
+          {p !== item.priority && item.moved_from === p && <span class="menu-note">The Agent's Pick</span>}
+        </button>))}
+      <p class="menu-foot">{learns ? 'The agent learns from it: a lesson goes to the Feedback Inbox for approval.'
+        : 'An item your team added: it just moves.'}</p>
+    </Menu>
+  );
+}
+
 function ItemCard({ item, deal, open, onToggle, onChange }) {
   const status = useMenu();
   const due = useMenu();
+  const move = useMenu();
   const [notes, setNotes] = useState(item.notes || '');
   useEffect(() => setNotes(item.notes || ''), [item.notes]);
   const owner = item.owner === 'TC' ? deal.tc || 'TC' : item.owner;
@@ -37,6 +57,8 @@ function ItemCard({ item, deal, open, onToggle, onChange }) {
           onKeyDown={e => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), onToggle())}>
           <span class="row-title">
             {item.change === 'new' && <span class="chip green" style="margin-right:6px">New</span>}
+            {item.origin === 'lien_search' && <span class="chip red" style="margin-right:6px">Lien Search Blocker</span>}
+            {item.moved_from && <span class="chip" style="margin-right:6px" title={`The agent had it in ${PRIORITY[item.moved_from]}`}>Moved</span>}
             {item.title}
           </span>
           <span class="row-sub">{item.action}</span>
@@ -58,6 +80,9 @@ function ItemCard({ item, deal, open, onToggle, onChange }) {
           </button>
           <DatePicker menu={due} value={item.due_date || ''} time={item.due_time || ''} title={item.title}
             onSet={(due_date, due_time) => onChange({ due_date, due_time })} />
+          <button class="mini muted" title="Move to another section" aria-label="Move to another section"
+            disabled={removed} aria-haspopup="menu" onClick={move.open}><Icon name="move" /></button>
+          <MoveMenu menu={move} item={item} onMove={p => onChange({ priority: p })} />
           <button class={`mini ${item.notes ? '' : 'muted'}`} title={item.notes || 'Notes'} onClick={onToggle}>
             <Icon name="note" />
           </button>
@@ -187,8 +212,9 @@ function MissingDialog({ deal, onClose }) {
   };
   return (
     <Modal title="Report A Missing Item" onClose={onClose}>
-      <p class="row-sub" style="margin:0">Something the agent should have listed. Once an admin approves the lesson, the
-        agent checks for it on every deal.</p>
+      <p class="row-sub" style="margin:0">Something the agent should have listed. The agent drafts a lesson for the
+        Feedback Inbox; once an admin approves it, the agent checks for it on every deal. (Found by the lien search?
+        Use Add Lien Search Blocker instead.)</p>
       <label class="field"><span>What's Missing</span>
         <input class="input" value={f.what} onInput={set('what')} placeholder="e.g. Final water bill / utility lien search" /></label>
       <label class="field"><span>Where In The Document (Optional)</span>
@@ -207,6 +233,38 @@ function MissingDialog({ deal, onClose }) {
         <button class="btn ghost pill" onClick={onClose}>Cancel</button>
         <button class="btn primary pill" disabled={!f.what.trim() || busy} onClick={send}>
           {busy && <Spinner />} Send Feedback</button>
+      </div>
+    </Modal>
+  );
+}
+
+// Add Lien Search Blocker (owner 2026-11-19): a Closing Blocker from the lien search, an outside task. It doesn't go to
+// the Feedback Inbox (nothing for the agent to learn) and goes to the Team Hub with the deal's other blockers.
+function LienDialog({ deal, onClose }) {
+  const toast = useToast();
+  const [f, setF] = useState({ what: '', action: '', provided_by: 'Title Company / Attorney' });
+  const [busy, setBusy] = useState(false);
+  const set = k => e => setF({ ...f, [k]: e.currentTarget.value });
+  const send = async () => {
+    setBusy(true);
+    try { await api.lienSearch(deal.id, f); toast('Added as a Lien Search Blocker.'); onClose(); }
+    catch (e) { toast(e.message, true); setBusy(false); }
+  };
+  return (
+    <Modal title="Add A Lien Search Blocker" onClose={onClose}>
+      <p class="row-sub" style="margin:0">Something the lien search found that has to be cleared before closing. It's
+        added to this deal's Closing Blockers and the Team Hub. It doesn't change what the agent learns.</p>
+      <label class="field"><span>What The Lien Search Found</span>
+        <input class="input" value={f.what} onInput={set('what')} placeholder="e.g. Open code enforcement lien, City of Example" /></label>
+      <label class="field"><span>What Has To Happen (Optional)</span>
+        <textarea class="input" rows={3} value={f.action} onInput={set('action')}
+          placeholder="e.g. Get the payoff from the city and a recorded release before closing." /></label>
+      <label class="field"><span>Who Has To Provide It</span>
+        <input class="input" value={f.provided_by} onInput={set('provided_by')} /></label>
+      <div class="actions">
+        <button class="btn ghost pill" onClick={onClose}>Cancel</button>
+        <button class="btn primary pill" disabled={!f.what.trim() || busy} onClick={send}>
+          {busy ? <Spinner /> : <Icon name="plus" />} Add Blocker</button>
       </div>
     </Modal>
   );
@@ -361,6 +419,7 @@ export function Deal({ id, me }) {
         <button class="btn glass pill" onClick={() => setDialog('export')}><Icon name="download" /> Export List</button>
         {me?.can?.report_missing !== false && (
           <button class="btn primary pill" onClick={() => setDialog('missing')}><Icon name="plus" /> Report Missing Item</button>)}
+        <button class="btn outline pill" onClick={() => setDialog('lien')}><Icon name="lien" /> Add Lien Search Blocker</button>
         <span style="flex:1" />
         <button class="btn ghost pill" disabled={!run} onClick={() => setDialog('rerun')}><Icon name="refresh" /> Re-run</button>
         <button class="btn ghost pill" onClick={() => go(`analyze/update/${deal.id}`)}><Icon name="upload" /> Updated Commitment</button>
@@ -400,6 +459,7 @@ export function Deal({ id, me }) {
       {dialog === 'export' && <ExportDialog deal={deal} items={items} onClose={() => setDialog('')} />}
       {dialog === 'missing' && <MissingDialog deal={deal} onClose={() => setDialog('')} />}
       {dialog === 'rerun' && <RerunDialog deal={deal} onClose={() => setDialog('')} />}
+      {dialog === 'lien' && <LienDialog deal={deal} onClose={() => setDialog('')} />}
     </>
   );
 }

@@ -1,6 +1,6 @@
-"""Builds the branded Title Commitment Agent user guides (PDF), one per role, for the app's Help page:
+"""Builds the branded Title Commitment & Lien Agent user guides (PDF), one per role, for the app's Help page:
 
-    uv run python docs/guide/build_guide.py      ->  web/public/guides/Title_Commitment_Agent_*_Guide.pdf
+    uv run python docs/guide/build_guide.py      ->  web/public/guides/Title_Commitment_Lien_Agent_*_Guide.pdf
 
 TC Guide (Members): sections 1-13 and the Quick Reference Card. Team Leader Guide: the same plus section 14,
 approving lessons. Manager Guide: section 14 also covers Team, Settings and Connections. The page (Help, from your
@@ -49,13 +49,14 @@ CROPS = HERE / ".crops"  # cropped copies of the screenshots, rebuilt each time 
 OUT = ROOT / "web" / "public" / "guides"  # served by the page at /guides/…
 # reader → (the guide's name, who it's for, its file); web/src/pages/Help.jsx links the same files
 GUIDES = {
-    "member": ("TC Guide", "For: Transaction Coordinators (Members)", "Title_Commitment_Agent_TC_Guide.pdf"),
+    "member": ("TC Guide", "For: Transaction Coordinators (Members)", "Title_Commitment_Lien_Agent_TC_Guide.pdf"),
     "lead": ("Team Leader Guide", "For: Team Leaders (and anyone who approves lessons)",
-             "Title_Commitment_Agent_Team_Leader_Guide.pdf"),
-    "manager": ("Manager Guide", "For: Managers and the Owner", "Title_Commitment_Agent_Manager_Guide.pdf"),
+             "Title_Commitment_Lien_Agent_Team_Leader_Guide.pdf"),
+    "manager": ("Manager Guide", "For: Managers and the Owner", "Title_Commitment_Lien_Agent_Manager_Guide.pdf"),
 }
 LOGO = ROOT / "web" / "public" / "logo-full.png"
-APP = "Title Commitment Agent"
+APP = "Title Commitment &amp; Lien Agent"  # in the guide's text (markup)
+APP_TEXT = "Title Commitment & Lien Agent"  # drawn straight on the page
 
 # brand (web/src/styles.css)
 INDIGO, RED, GREEN = colors.HexColor("#4D458A"), colors.HexColor("#BD2239"), colors.HexColor("#109648")
@@ -326,9 +327,9 @@ def cover(c, doc) -> None:
     c.drawImage(str(LOGO), MARGIN, PAGE_H - 2.55 * inch, width=3.6 * inch, height=3.6 * inch * lh / lw, mask="auto")
     c.setFillColor(INDIGO)
     c.setFont("Baloo", 38)
-    c.drawString(MARGIN, PAGE_H - 4.1 * inch, "Title Commitment")
+    c.drawString(MARGIN, PAGE_H - 4.1 * inch, "Title Commitment &")
     c.setFillColor(RED)
-    c.drawString(MARGIN, PAGE_H - 4.65 * inch, "Agent")
+    c.drawString(MARGIN, PAGE_H - 4.65 * inch, "Lien Agent")
     c.setFont("Baloo-Semi", 22)
     c.setFillColor(INDIGO)
     c.drawString(MARGIN, PAGE_H - 5.2 * inch, doc.guide[0])
@@ -344,7 +345,7 @@ def cover(c, doc) -> None:
     c.drawString(MARGIN, PAGE_H - 6.85 * inch, doc.guide[1])
     c.setFont("Nunito", 10)
     c.setFillColor(MUTED)
-    c.drawString(MARGIN, PAGE_H - 7.12 * inch, f"Version 2.5 · {date.today():%B %Y} · title.totalchb.com")
+    c.drawString(MARGIN, PAGE_H - 7.12 * inch, f"Version 2.6 · {date.today():%B %Y} · title.totalchb.com")
     c.setFillColor(colors.white)
     c.setFont("Nunito-Bold", 9.5)
     c.drawString(MARGIN, 0.62 * inch, "Total Cash Home Buyers · Internal use only")
@@ -359,7 +360,7 @@ def inner(c, doc) -> None:
     c.drawImage(str(LOGO), MARGIN, PAGE_H - 0.62 * inch, width=1.2 * inch, height=1.2 * inch * lh / lw, mask="auto")
     c.setFont("Nunito-Semi", 8.5)
     c.setFillColor(MUTED)
-    c.drawRightString(PAGE_W - MARGIN, PAGE_H - 0.5 * inch, f"{APP} · {doc.guide[0]}")
+    c.drawRightString(PAGE_W - MARGIN, PAGE_H - 0.5 * inch, f"{APP_TEXT} · {doc.guide[0]}")
     c.setStrokeColor(LINE)
     c.setLineWidth(0.6)
     c.line(MARGIN, PAGE_H - 0.72 * inch, PAGE_W - MARGIN, PAGE_H - 0.72 * inch)
@@ -415,7 +416,10 @@ def story(reader: str) -> list:
               "New in 2.3: <b>Help</b> under your photo, with the guide for your role. New in 2.4: Help works as in "
               "the Team Hub: the guide inside the app, the PDFs to open or download, and the Team Hub's delete "
               "passwords for Team Leaders and Managers. New in 2.5: the Team Hub's header, with its clock and "
-              "<b>Active</b> (who's online).", "good",
+              "<b>Active</b> (who's online). New in 2.6: the new name, the <b>Title Commitment &amp; Lien Agent</b>; "
+              "<b>Add Lien Search Blocker</b>; moving an item to another section, which teaches the agent; deal "
+              "cards show how many Closing Blockers are cleared; and the daily email goes to everyone on the team "
+              "with Overdue and yesterday's Cleared.", "good",
               "What's new in version 2")]
     s.append(PageBreak())
 
@@ -478,10 +482,11 @@ def story(reader: str) -> list:
     # ---- 3
     s += section(3, "Finding Your Way Around", need=5.0)
     s += [shot("12-deals", "Deals, the home page: every open deal with its open Closing Blockers, days to closing and "
-                           "how much of the list is done.", 1.0, crop=(0.14, 0.0, 0.86, 0.78))]
+                           "how many of its Closing Blockers are cleared.", 1.0, crop=(0.0, 0.0, 1.0, 0.78))]
     s += [table(["Where", "What it's for"], [
         ["DEALS", "Home. Every reviewed deal, with search and Open / Closed / All. The numbers at the top count open "
-                  "deals, open Closing Blockers and deals closing in the next 7 days."],
+                  "deals, open Closing Blockers and deals closing in the next 7 days. Each card's ring is the share "
+                  "of its Closing Blockers cleared (100% when it has none), whatever else is still open."],
         ["ANALYZE", "Upload a new or updated commitment (section 4)."],
         ["TRAINING", "Optional: measure the agent on a commitment your team already worked (section 7)."],
         ["KNOWLEDGE", "What the agent knows: the Feedback Inbox, the team's lessons and the professional checklist."],
@@ -553,7 +558,7 @@ def story(reader: str) -> list:
     s += section(5, "Reading A Deal",
                  "The deal page is where you'll spend your time. Read it top to bottom the first time.")
     s += [shot("04-deal-top", "The top of a deal: the summary, the actions and the start of the list.", 1.0,
-               crop=(0.14, 0.12, 0.86, 1.0))]
+               crop=(0.0, 0.12, 1.0, 1.0))]
     s += [table(["At the top", "Meaning"], [
         ["Deal type and Closing chip", "The chip counts the days to closing; it turns orange inside 7 days and red "
                                        "once the date has passed."],
@@ -610,7 +615,19 @@ def story(reader: str) -> list:
         "then <b>Set Due Date</b>. <b>Remove</b> clears both. A blocker's new date and time go to the Team Hub too.",
         "Open the item, type in <b>Notes</b> (e.g. \"Payoff requested from servicer 10/26\") and click "
         "<b>Save Notes</b>.",
-    ]), shot("07-status-menu", "Changing a status. Every change saves at once and shows on everyone's screen.", 1.0,
+        "In the wrong section? Click the <b>arrows</b> button on the item and pick <b>Closing Blocker</b>, "
+        "<b>Before Closing</b> or <b>Review / FYI</b>. It moves at once (a Closing Blocker also goes to the Team "
+        "Hub) and shows <b>Moved</b>; re-runs keep it where you put it. The agent learns from it (section 7).",
+        "The lien search found something? Click <b>Add Lien Search Blocker</b> (next to Report Missing Item), say "
+        "what it found and what has to happen, and click <b>Add Blocker</b>. It's added to the Closing Blockers "
+        "with a red <b>Lien Search Blocker</b> label and goes to the Team Hub. It's an outside task, so it doesn't "
+        "change what the agent learns.",
+    ]), shot("28-move", "The arrows button: move an item to another section.", 1.0,
+             crop=(0.008, 0.302, 0.992, 0.654)),
+        shot("29-lien", "Add A Lien Search Blocker.", 0.55, crop=(0.27, 0.167, 0.73, 0.833), max_h=4.0),
+        shot("30-blockers", "A moved item and a Lien Search Blocker in the Closing Blockers.", 1.0,
+             crop=(0.008, 0.441, 0.992, 0.661))]
+    s += [shot("07-status-menu", "Changing a status. Every change saves at once and shows on everyone's screen.", 1.0,
              crop=(0.14, 0.22, 0.86, 0.66)),
           shot("24-due-picker", "The due date calendar and time, the same as the Team Hub's.", 0.45,
                crop=(0.49, 0.254, 0.777, 0.817))]
@@ -638,7 +655,8 @@ def story(reader: str) -> list:
 
     # ---- 7
     s += section(7, "When The Agent Misses Something",
-                 "This is how the agent gets better. Report every miss, even small ones.")
+                 "This is how the agent gets better: every miss you report and every item you move to another "
+                 "section becomes a lesson, once an admin approves it. Training isn't needed for that.")
     s += [steps([
         "On the deal, click <b>Report Missing Item</b>. (Don't see it? A manager can allow it: Settings → "
         "Permissions.)",
@@ -646,10 +664,27 @@ def story(reader: str) -> list:
         "Stop Or Delay The Closing</b>.",
         "Pick the <b>Priority</b> and <b>Who Has To Provide It</b>. Leave <b>Add it to this deal's list now</b> "
         "ticked so it goes straight onto your list (a Closing Blocker also goes to the Team Hub).",
-        "Click <b>Send Feedback</b>. It lands in the Feedback Inbox on the Knowledge tab. Once an admin approves the "
-        "lesson, the agent checks for it on every deal.",
+        "Click <b>Send Feedback</b>. It lands in the Feedback Inbox on the Knowledge tab, where the agent drafts the "
+        "lesson as a general rule. Once an admin approves it, the agent checks for it on every deal.",
     ]), shot("08-missing", "Report A Missing Item.", 0.62, crop=(0.305, 0.085, 0.705, 0.965), max_h=4.6)]
-    s += [P("Something on the list is wrong or not needed?", "h2"),
+    s += [P("An item in the wrong section?", "h2"),
+          P("Move it (the <b>arrows</b> button, section 6). Moving an item the agent placed sends one card to the "
+            "Feedback Inbox (<b>Moved Section</b>): the agent drafts the general rule that would have put items like "
+            "it in the right section, and once an admin approves it, the agent sorts them that way on every deal. "
+            "Moving it back where the agent had it withdraws the card. Items your team added (Report Missing Item, "
+            "Lien Search Blockers) just move."),
+          P("How the agent learns", "h2"),
+          table(["You…", "The agent…"], [
+              ["Move an item to another section", "Drafts a lesson for the Feedback Inbox; it applies once approved."],
+              ["Report a missing item", "Drafts a lesson for the Feedback Inbox; it applies once approved."],
+              ["Add a lesson by hand (Knowledge → Add Lesson)", "Follows it from the next review."],
+              ["Add a Lien Search Blocker", "Nothing to learn: it's an outside task."],
+              ["Run Training (optional)", "Measures how much it finds; each miss is a suggested lesson."],
+          ], [0.45, 0.55]),
+          P("Each approved lesson shows on the Knowledge tab with <b>Learned from</b>: who moved or reported what, on "
+            "which deal. Only the general rule goes to the agent."),
+          shot("33-learned", "An approved lesson and where it was learned.", 1.0, crop=(0.008, 0.432, 0.992, 0.569)),
+          P("Something on the list is wrong or not needed?", "h2"),
           P("Open the item and click <b>Feedback</b> at the bottom right of the card: <b>Not Needed On This Deal</b> "
             "or <b>Wrong Information</b>. It goes to the Feedback Inbox. Then set the item to <b>Waived</b> with a "
             "note.")]
@@ -728,7 +763,10 @@ def story(reader: str) -> list:
                                                     "<b>Open</b> here again."],
         ["You change a blocker's due date or time", "The subtask's date and time follow (a date without a time is "
                                                     "9:00 AM there)."],
-        ["You Report a Missing Closing Blocker (added to the list)", "A new subtask appears."],
+        ["You Report a Missing Closing Blocker (added to the list) or add a Lien Search Blocker",
+         "A new subtask appears (a Lien Search Blocker's note says so)."],
+        ["You move an item into Closing Blockers", "A new subtask appears."],
+        ["You move a Closing Blocker to another section", "It stays in the hub with a note that it left the list."],
         ["An updated commitment removes a blocker", "It's no longer sent to the hub."],
         ["Anything was missed (the hub was busy, a connection dropped)", "It's sent again with the next change, "
                                                                           "and a catch-up runs every weekday "
@@ -750,7 +788,8 @@ def story(reader: str) -> list:
     s += section(11, "Deals, Closing Out And The Daily Email")
     s += [P("The Deals page", "h2"),
           P("Every reviewed deal, newest first. Each card shows the deal type, closing date, TC and title company, "
-            "the open Closing Blockers (or <b>No blockers</b>), the days to closing and how much of the list is done. "
+            "the open Closing Blockers (or <b>No blockers</b>), the days to closing and how many of its Closing "
+            "Blockers are cleared (the ring; 100% when there are none), whatever else is still open. "
             "Search by address, TC, title company or commitment number, and switch between <b>Open</b>, "
             "<b>Closed</b> and <b>All</b>. Click a card to open the deal.")]
     s += [P("Closing out a deal", "h2"),
@@ -758,13 +797,16 @@ def story(reader: str) -> list:
             "list, the daily email and the Team Hub catch-up. <b>Reopen Deal</b> brings it back. The original PDFs "
             "stay under <b>Documents And Review History</b>; click one to open it.")]
     s += [P("The daily email", "h2"),
-          P(f"Every weekday at 8:00 AM Eastern, everyone on the list gets one email from the <b>{APP}</b> "
-            "(title-agent@totalchb.com) with every open deal's open <b>Closing Blockers</b>, and nothing else: "
-            "the totals at the top (open deals, open blockers, due in the next 3 days, overdue), then one card per "
-            "deal with each blocker's headline and due date (and time, when one is set). "
+          P(f"Every weekday at 8:00 AM Eastern, everyone on the team gets one email from the <b>{APP}</b> "
+            "(title-agent@totalchb.com), titled like <b>Title Commitment &amp; Lien Agent: 21 Closing Blockers, "
+            "3 Overdue, 2 Cleared (Nov 18)</b>. It has every open deal's open <b>Closing Blockers</b>, and nothing "
+            "else: the totals at the top (open deals, open blockers, overdue, and the Closing Blockers cleared the "
+            "day before; on Mondays, Friday through Sunday), then one card per deal with each blocker's headline and "
+            "due date (and time, when one is set), then the blockers cleared the day before. "
             "Tap an address to open the deal. Deals without open "
             "blockers are listed at the end. It's built at 8:00 from the list as it stands, so clear what's done "
-            "before then. With no open deals it still arrives and says so.")]
+            "before then. With no open deals it still arrives and says so. The team follows the Universal Team "
+            "Hub, so someone added there gets it from the next morning.")]
 
     # ---- 12
     s += section(12, "Good Habits")
@@ -786,7 +828,8 @@ def story(reader: str) -> list:
                                                     "one."],
         ["Does it work on my phone?", "Yes, in the phone's browser with the same link and sign-in."],
         ["\"The AI service is busy\" or another error.", "Wait a minute and click the button again. Nothing is lost."],
-        ["\"Couldn't reach the Title Commitment Agent.\"", "Your internet connection dropped. Try again once it's "
+        ["\"Couldn't reach the Title Commitment &amp; Lien Agent.\"",
+         "Your internet connection dropped. Try again once it's "
                                                            "back."],
         ["The numbering check is red.", "Read the listed item numbers in the commitment yourself and add anything "
                                         "missing with Report Missing Item."],
@@ -811,7 +854,8 @@ def story(reader: str) -> list:
         ["I can't see Report Missing Item, or can't approve lessons.", "Your role doesn't allow it yet. A manager "
                                                                          "can turn it on: Settings → Permissions."],
         ["How do I change someone's role or photo?", "In the Universal Team Hub (Managers): your photo → Team "
-                                                     "Members. The Title Commitment Agent follows within 10 minutes."],
+                                                     "Members. The Title Commitment &amp; Lien Agent follows within 10 "
+                                                     "minutes."],
         ["Who sees my changes?", "Everyone on the team, immediately. Your email is recorded on each change."],
         ["Where do I find this guide again?", "Your photo, top right → Help."],
     ], [0.38, 0.62])]
@@ -831,16 +875,19 @@ def story(reader: str) -> list:
                      "settings.")
     s += [P("Approving lessons (Knowledge tab)", "h2"),
           shot("16-knowledge", "Knowledge: how the agent scores, the active lessons, the checklist, and the Feedback "
-                               "Inbox.", 1.0, crop=(0.14, 0.12, 0.86, 1.0), max_h=4.4)]
+                               "Inbox with a moved item and the lesson the agent drafted.", 1.0,
+               crop=(0.0, 0.12, 1.0, 1.0), max_h=4.4)]
     s += [steps([
         "Open <b>KNOWLEDGE</b>. <b>Feedback Waiting</b> shows how many items need approving. Managers can always "
         "approve; Team Leaders and Members can if Settings → Permissions allows it.",
-        "Read each card in the <b>Feedback Inbox</b> (Missing Item, Not Needed, Wrong Info or Training Gap). The "
-        "suggested lesson is in the text box.",
+        "Read each card in the <b>Feedback Inbox</b> (Moved Section, Missing Item, Not Needed, Wrong Info or "
+        "Training Gap). For a moved or missing item, the agent drafts the lesson within moments; it's in the text "
+        "box.",
         "Edit it into a <b>general rule</b> the agent can apply to every commitment. Good: \"When a city lists unpaid "
         "water or sewer charges, order a final read and list the payoff as a Closing Blocker.\" Bad: names, "
         "addresses, amounts or case numbers from one deal.",
-        "Click <b>Approve Lesson</b> (it applies from the next review) or <b>Reject</b>.",
+        "Click <b>Approve Lesson</b> (it applies from the next review) or <b>Reject</b>. Approved lessons show "
+        "<b>Learned from</b>: who moved or reported what, on which deal.",
     ])]
     s += [P("Under <b>Lessons</b>, every lesson has an on/off switch: turn one off if it causes wrong items. Add your "
             "own in the box below the list with <b>Add Lesson</b>. The first lessons came from the 8 worked "
@@ -880,14 +927,14 @@ def story(reader: str) -> list:
               "tip", "Login As User")]
     s += [CondPageBreak(3.6 * inch), P("Settings", "h2"),
           P("Click your photo → <b>Settings</b>. Change what you need, then click <b>Save Settings</b>."),
-          shot("26-permissions", "Permissions, and picking who gets the daily email (made-up names).", 1.0,
-               crop=(0.14, 0.05, 0.86, 0.47), max_h=4.6)]
+          shot("26-permissions", "Permissions, and the daily email: everyone on the team (made-up names).", 1.0,
+               crop=(0.008, 0.141, 0.992, 0.457), max_h=4.6)]
     s += [table(["Setting", "What to put"], [
         ["Permissions", "Switches for what <b>Team Leaders</b> and <b>Members</b> may do: <b>Approve Lessons</b> "
                         "(the Feedback Inbox and lessons) and <b>Add Missing Items</b> (Report Missing Item). Managers "
                         "can always do both."],
-        ["Daily Email: Send To", "Click the people on the team who get the morning summary (a tick shows who's in). "
-                                 "Someone not on the team: type their email and click <b>Add</b>."],
+        ["Daily Email: Send To", "Everyone on the team gets the morning summary (the team follows the Universal "
+                                 "Team Hub). Someone not on the team: type their email and click <b>Add</b>."],
         ["Daily Email: Send From", "title-agent@totalchb.com (leave as is)."],
         ["Due Dates", "Days before closing for each kind of item (payoffs 10, curative 14, documents 5, bring-down 5, "
                       "closing 0)."],

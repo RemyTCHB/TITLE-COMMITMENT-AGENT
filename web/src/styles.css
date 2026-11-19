@@ -1,4 +1,4 @@
-/* Title Commitment Agent v2: the Universal Team Hub's design (RemyTCHB/HUB), so the team's apps look and
+/* Title Commitment & Lien Agent v2: the Universal Team Hub's design (RemyTCHB/HUB), so the team's apps look and
    work alike. Tokens are the hub's own (TCHB palette, Baloo 2 + Nunito Sans, spacing, radii, shadows, glass);
    light and dark match the hub's DARK_BASE / GLASS_* values. Components are classes instead of inline styles. */
 
@@ -759,3 +759,14 @@ pre.code { margin: 0; padding: 14px; max-height: 320px; overflow: auto; border-r
   .guide-body .g-pair img { max-width: none; }
 }
 @media (max-width: 359px) { .guide-body { padding: 4px 12px 32px; font-size: 14px; } .guide-pdf .btn { padding: 6px 10px; } }
+
+/* moving an item to another section (owner 2026-11-19) */
+.dot-p { width: 9px; height: 9px; flex: none; border-radius: 999px; background: var(--tchb-indigo-500); }
+.dot-p.p-blocker { background: var(--tchb-red-500); }
+.dot-p.p-before { background: #d97706; }
+.menu .menu-note { margin-left: auto; font-family: var(--font-body); font-size: 11px; font-weight: 700; color: var(--text-muted); }
+.menu button:disabled { cursor: default; opacity: 1; background: var(--glass-hover); }
+.menu .menu-foot { margin: 4px 0 2px; padding: 6px 12px 4px; border-top: 1px solid var(--glass-divider); font-size: 12px;
+  line-height: 1.4; color: var(--text-muted); max-width: 260px; }
+span.person-chip { cursor: default; }
+.row-sub.learned { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 13px; }
