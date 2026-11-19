@@ -345,7 +345,7 @@ def cover(c, doc) -> None:
     c.drawString(MARGIN, PAGE_H - 6.85 * inch, doc.guide[1])
     c.setFont("Nunito", 10)
     c.setFillColor(MUTED)
-    c.drawString(MARGIN, PAGE_H - 7.12 * inch, f"Version 2.6 · {date.today():%B %Y} · title.totalchb.com")
+    c.drawString(MARGIN, PAGE_H - 7.12 * inch, f"Version 2.7 · {date.today():%B %Y} · title.totalchb.com")
     c.setFillColor(colors.white)
     c.setFont("Nunito-Bold", 9.5)
     c.drawString(MARGIN, 0.62 * inch, "Total Cash Home Buyers · Internal use only")
@@ -419,7 +419,9 @@ def story(reader: str) -> list:
               "<b>Active</b> (who's online). New in 2.6: the new name, the <b>Title Commitment &amp; Lien Agent</b>; "
               "<b>Add Lien Search Blocker</b>; moving an item to another section, which teaches the agent; deal "
               "cards show how many Closing Blockers are cleared; and the daily email goes to everyone on the team "
-              "with Overdue and yesterday's Cleared.", "good",
+              "with Overdue and yesterday's Cleared. New in 2.7: the Training tab is gone (the agent learns from "
+              "moved and missing items and your lessons), and the professional checklist takes new checks with "
+              "the checklist password.", "good",
               "What's new in version 2")]
     s.append(PageBreak())
 
@@ -488,8 +490,8 @@ def story(reader: str) -> list:
                   "deals, open Closing Blockers and deals closing in the next 7 days. Each card's ring is the share "
                   "of its Closing Blockers cleared (100% when it has none), whatever else is still open."],
         ["ANALYZE", "Upload a new or updated commitment (section 4)."],
-        ["TRAINING", "Optional: measure the agent on a commitment your team already worked (section 7)."],
-        ["KNOWLEDGE", "What the agent knows: the Feedback Inbox, the team's lessons and the professional checklist."],
+        ["KNOWLEDGE", "What the agent knows: the Feedback Inbox, the team's lessons and the professional checklist "
+                      "(anyone with the checklist password can add to it)."],
         ["The clock", "Eastern time from the website's own clock, in the colour of the connection: green when "
                       "everything is saved, indigo while a change is on its way, red when it isn't saved or the "
                       "page is offline. Click it for the details (and <b>Retry Now</b> when that's safe)."],
@@ -656,7 +658,7 @@ def story(reader: str) -> list:
     # ---- 7
     s += section(7, "When The Agent Misses Something",
                  "This is how the agent gets better: every miss you report and every item you move to another "
-                 "section becomes a lesson, once an admin approves it. Training isn't needed for that.")
+                 "section becomes a lesson, once an admin approves it. There's no separate training to run.")
     s += [steps([
         "On the deal, click <b>Report Missing Item</b>. (Don't see it? A manager can allow it: Settings → "
         "Permissions.)",
@@ -678,8 +680,8 @@ def story(reader: str) -> list:
               ["Move an item to another section", "Drafts a lesson for the Feedback Inbox; it applies once approved."],
               ["Report a missing item", "Drafts a lesson for the Feedback Inbox; it applies once approved."],
               ["Add a lesson by hand (Knowledge → Add Lesson)", "Follows it from the next review."],
+              ["Add a check to the professional checklist (password)", "Runs it on every file from the next review."],
               ["Add a Lien Search Blocker", "Nothing to learn: it's an outside task."],
-              ["Run Training (optional)", "Measures how much it finds; each miss is a suggested lesson."],
           ], [0.45, 0.55]),
           P("Each approved lesson shows on the Knowledge tab with <b>Learned from</b>: who moved or reported what, on "
             "which deal. Only the general rule goes to the agent."),
@@ -688,15 +690,16 @@ def story(reader: str) -> list:
           P("Open the item and click <b>Feedback</b> at the bottom right of the card: <b>Not Needed On This Deal</b> "
             "or <b>Wrong Information</b>. It goes to the Feedback Inbox. Then set the item to <b>Waived</b> with a "
             "note.")]
-
-    s += [P("Training: measuring the agent (optional)", "h2"),
-          P("To measure the agent, open <b>TRAINING</b>, upload a commitment your team already worked, pick the deal "
-            "type, paste the closer's list as is and click <b>Compare With Agent</b>. You'll see what both found, "
-            "what the agent missed (each becomes a suggested lesson in the Feedback Inbox) and what it added. Leave "
-            "the list empty for a clean title: the agent should then find no Closing Blockers. Each comparison is a "
-            "full review: 1–3 minutes and roughly $1–2 in AI usage."),
-          shot("15-training-results", "Training: the closer's list compared with the agent's.", 1.0,
-               crop=(0.14, 0.57, 0.86, 0.93))]
+    s += [P("Adding to the professional checklist", "h2"),
+          P("The checklist is what the agent looks for on every file, whatever the commitment says (Knowledge → "
+            "<b>The Professional Checklist</b>). To add to it, click <b>Add A Check</b>, pick the group, name the "
+            "check, say what to look for (a general rule, nothing from one deal), pick deal types if it only applies "
+            "to some (none picked: every deal), type the <b>checklist password</b> and click <b>Add Check</b>. The "
+            "agent runs it from the next review. Checks the team added show <b>Team</b> with who added them, and can "
+            "be removed with the same password; the built-in ones stay. Ask a manager for the password."),
+          shot("34-add-check", "Add A Check, with the checklist password.", 0.55, crop=(0.27, 0.054, 0.73, 0.946),
+               max_h=4.4),
+          shot("35-team-check", "A check the team added, in its group.", 1.0, crop=(0.008, 0.313, 0.992, 0.56))]
 
 
     # ---- 8
@@ -874,15 +877,14 @@ def story(reader: str) -> list:
                      "allows it, and use the Team Hub's delete passwords. A manager sets up the team and the "
                      "settings.")
     s += [P("Approving lessons (Knowledge tab)", "h2"),
-          shot("16-knowledge", "Knowledge: how the agent scores, the active lessons, the checklist, and the Feedback "
-                               "Inbox with a moved item and the lesson the agent drafted.", 1.0,
+          shot("16-knowledge", "Knowledge: the active lessons, what the team taught it, the checklist, and the "
+                               "Feedback Inbox with a moved item and the lesson the agent drafted.", 1.0,
                crop=(0.0, 0.12, 1.0, 1.0), max_h=4.4)]
     s += [steps([
         "Open <b>KNOWLEDGE</b>. <b>Feedback Waiting</b> shows how many items need approving. Managers can always "
         "approve; Team Leaders and Members can if Settings → Permissions allows it.",
-        "Read each card in the <b>Feedback Inbox</b> (Moved Section, Missing Item, Not Needed, Wrong Info or "
-        "Training Gap). For a moved or missing item, the agent drafts the lesson within moments; it's in the text "
-        "box.",
+        "Read each card in the <b>Feedback Inbox</b> (Moved Section, Missing Item, Not Needed or Wrong Info). For "
+        "a moved or missing item, the agent drafts the lesson within moments; it's in the text box.",
         "Edit it into a <b>general rule</b> the agent can apply to every commitment. Good: \"When a city lists unpaid "
         "water or sewer charges, order a final read and list the payoff as a Closing Blocker.\" Bad: names, "
         "addresses, amounts or case numbers from one deal.",
@@ -891,8 +893,8 @@ def story(reader: str) -> list:
     ])]
     s += [P("Under <b>Lessons</b>, every lesson has an on/off switch: turn one off if it causes wrong items. Add your "
             "own in the box below the list with <b>Add Lesson</b>. The first lessons came from the 8 worked "
-            "commitments the team provided. Further down: the training examples with their latest score, and "
-            "<b>The Professional Checklist</b> (34 checks the agent runs on every deal)."),
+            "commitments the team provided. Further down: <b>The Professional Checklist</b> (34 built-in checks the "
+            "agent runs on every deal, plus any the team added with the checklist password: section 7)."),
           shot("17-lessons", "Lessons: each one can be turned off and on.", 1.0, crop=(0.14, 0.56, 0.86, 1.0))]
     # the Team Hub's delete passwords: only in the app (Help reads them from the hub), never printed
     hub_pw = ("Deleting a task or subtask in the Universal Team Hub that isn't yours asks for its department's "
@@ -936,6 +938,7 @@ def story(reader: str) -> list:
         ["Daily Email: Send To", "Everyone on the team gets the morning summary (the team follows the Universal "
                                  "Team Hub). Someone not on the team: type their email and click <b>Add</b>."],
         ["Daily Email: Send From", "title-agent@totalchb.com (leave as is)."],
+        ["Send Me A Test Email", "Today's email as it stands now (with the day before's clears), to you only."],
         ["Due Dates", "Days before closing for each kind of item (payoffs 10, curative 14, documents 5, bring-down 5, "
                       "closing 0)."],
         ["Google Drive Folder", "The link of the shared folder where every export is saved (a folder per type "

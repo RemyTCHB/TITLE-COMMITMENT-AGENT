@@ -1,12 +1,12 @@
 """Title Commitment & Lien Agent engine (v2, docs/PLAN-v2.md): the private service behind title.totalchb.com.
 
-It holds the AI key and runs everything that needs the server: reading commitments, reviews, training comparisons,
+It holds the AI key and runs everything that needs the server: reading commitments, reviews,
 exports, and every change to the data (the page reads Firestore live; the security rules keep it read-only). Every
 request carries the person's Firebase ID token; only verified accounts on ALLOWED_DOMAINS (default totalchb.com) or
 in ALLOWED_EMAILS get in. Managers (Team tab) change settings; Settings → Permissions says what Team Leaders and
 Members may do.
 
-Long steps (read, review, re-run, training) take 1–3 minutes: the page sends a job id, watches jobs/{id} in
+Long steps (read, review, re-run) take 1–3 minutes: the page sends a job id, watches jobs/{id} in
 Firestore for the current step, and gets the result in the response (Cloud Run timeout 15 minutes).
 
     uv run uvicorn engine.main:app --port 8080
@@ -14,6 +14,7 @@ Firestore for the current step, and gets the result in the response (Cloud Run t
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 import re
@@ -29,7 +30,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from titleagent import daily, flows, hub
+from titleagent import daily, emailer, flows, hub
 from titleagent.access import email_allowed
 from titleagent.config import DEAL_TYPES, DEFAULT_SETTINGS, PERMISSIONS, Secrets, demo_mode, load_secrets
 from titleagent.exports import INCLUDE, google
@@ -147,14 +148,6 @@ class ReviewIn(BaseModel):
 class JobIn(BaseModel):
     job_id: str
 
-class TrainIn(BaseModel):
-    job_id: str
-    path: str
-    filename: str = "Commitment.pdf"
-    deal_type: str = ""
-    name: str = ""
-    expert: list[str] = []
-
 class GoogleIn(BaseModel):
     kind: Literal["sheet", "doc"]
     include: str = "all"
@@ -182,6 +175,16 @@ class LienIn(BaseModel):
     what: str = Field(min_length=1, max_length=300)
     action: str = Field(default="", max_length=2000)
     provided_by: str = Field(default="Title Company / Attorney", max_length=80)
+
+class CheckIn(BaseModel):
+    password: str = Field(max_length=200)
+    group: str = Field(default="", max_length=60)
+    name: str = Field(min_length=3, max_length=120)
+    look_for: str = Field(min_length=10, max_length=1500)
+    deal_types: list[str] = Field(default=[], max_length=12)  # [] = every deal type
+
+class CheckOff(BaseModel):
+    password: str = Field(max_length=200)
 
 class LoginAsIn(BaseModel):
     email: str = Field(min_length=3, max_length=120)
@@ -234,7 +237,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                if o.strip()]
     app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=["*"], allow_headers=["*"],
                        expose_headers=["Content-Disposition", "X-Drive-Copy", "X-Drive-Note"])
-    state = {"engine": engine, "team_at": 0.0}
+    state = {"engine": engine, "team_at": 0.0, "pw_fails": {}}
 
     def eng() -> Engine:
         if state["engine"] is None:
@@ -370,6 +373,22 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             raise HTTPException(404, "That deal doesn't exist.")
         return deal
 
+    def checklist_password(e: Engine, u: User, given: str) -> None:
+        """The CHECKLIST secret (owner 2026-11-19) guards changes to the professional checklist. Five wrong tries in
+        ten minutes locks that person out for the rest of them. Never logged."""
+        want = e.secrets.checklist_password
+        if not want:
+            raise HTTPException(503, "Adding to the checklist isn't set up yet (the CHECKLIST secret).")
+        now = time.time()
+        fails = [t for t in state["pw_fails"].get(u.email, []) if now - t < 600]
+        if len(fails) >= 5:
+            raise HTTPException(429, "Too many wrong passwords. Try again in 10 minutes.")
+        if not hmac.compare_digest(given.encode(), want.encode()):
+            state["pw_fails"][u.email] = [*fails, now]
+            log.info("checklist: a wrong password")
+            raise HTTPException(403, "That's not the checklist password.")
+        state["pw_fails"].pop(u.email, None)
+
     @app.get("/health")  # not /healthz: Cloud Run reserves paths ending in "z"
     def health():
         return {"ok": True}
@@ -380,6 +399,58 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         return {"email": u.email, "admin": u.admin, "role": u.role, "can": u.can, "imp": u.imp,
                 "login_as": bool(owner and u.email == owner and not u.imp and e.accounts),
                 "team_from_hub": e.secrets.has_hub}
+
+    @app.post("/v1/email/test")
+    def email_test(u: User = Depends(admin), e: Engine = Depends(eng)):
+        """Settings → Send Me A Test Email (Managers): today's daily email, built now from the live list (the day
+        before's clears included), to the person who asked only. Nothing is recorded; the team gets nothing."""
+        if not e.secrets.resend_api_key:
+            raise HTTPException(503, "The email service isn't set up (RESEND_API_KEY).")
+        day = datetime.now(UTC).astimezone(emailer.EASTERN).date()
+        subject, html = daily.build(e.store, day, hub.APP_URL)
+        try:
+            emailer.send(e.secrets.resend_api_key, e.store.get_settings()["email_from"], [u.email], subject, html)
+        except Exception as exc:
+            log.warning("test email failed: %s", type(exc).__name__)
+            raise HTTPException(502, "The email service didn't take it. Try again in a minute.") from exc
+        return {"to": u.email, "subject": subject}
+
+    # ---- the professional checklist: the team's own checks (owner 2026-11-19), with the CHECKLIST password
+    @app.post("/v1/checklist")
+    def add_check(body: CheckIn, u: User = Depends(user), e: Engine = Depends(eng)):
+        """A check the agent runs on every file (or the deal types picked), from the next review. Kept in the app
+        database (settings "checklist_extra"); the built-in checks are in titleagent/checklist.py."""
+        from titleagent import checklist
+
+        checklist_password(e, u, body.password)
+        group = body.group.strip() or checklist.TEAM_GROUP
+        if group not in [*checklist.GROUPS, checklist.TEAM_GROUP]:
+            raise HTTPException(400, "Pick one of the checklist's groups.")
+        if any(t not in DEAL_TYPES for t in body.deal_types):
+            raise HTTPException(400, "Pick deal types from the list.")
+        extra = list(e.store.get_settings().get("checklist_extra") or [])
+        checklist.use(extra)
+        name = " ".join(body.name.split())
+        if any(c.name.lower() == name.lower() for c in checklist.all_checks()):
+            raise HTTPException(400, "The checklist already has a check with that name.")
+        # TM1, TM2, …: the built-in checks use one letter (T1 is a built-in tax check)
+        n = max([int(x["id"][2:]) for x in extra if re.fullmatch(r"TM\d+", x.get("id", ""))], default=0) + 1
+        check = {"id": f"TM{n}", "group": group, "name": name, "look_for": " ".join(body.look_for.split()),
+                 "deal_types": body.deal_types, "by": u.by, "at": datetime.now(UTC).isoformat()}
+        e.store.set_setting("checklist_extra", [*extra, check], by=u.by)
+        log.info("checklist: a check added (%d team checks)", len(extra) + 1)
+        return {"id": check["id"]}
+
+    @app.post("/v1/checklist/{check_id}/remove")
+    def remove_check(check_id: str, body: CheckOff, u: User = Depends(user), e: Engine = Depends(eng)):
+        """Only checks the team added can be removed; the built-in ones stay."""
+        checklist_password(e, u, body.password)
+        extra = list(e.store.get_settings().get("checklist_extra") or [])
+        kept = [x for x in extra if x.get("id") != check_id]
+        if len(kept) == len(extra):
+            raise HTTPException(404, "Only checks the team added can be removed.")
+        e.store.set_setting("checklist_extra", kept, by=u.by)
+        return {"ok": True}
 
     @app.post("/v1/presence")
     def presence(body: PresenceIn, u: User = Depends(user), e: Engine = Depends(eng)):
@@ -511,18 +582,6 @@ def create_app(engine: Engine | None = None) -> FastAPI:
                       lambda progress: {"deal_id": flows.rerun(e.store, e.llm(), deal_id, u.email, progress)})
         to_hub(bg, e, deal_id)
         return out
-
-    @app.post("/v1/training")
-    def train(body: TrainIn, u: User = Depends(user), e: Engine = Depends(eng)):
-        data = upload(e, u, body.path)
-
-        def go(progress):
-            out = flows.train(e.store, e.llm(), data, body.filename, body.deal_type, body.name,
-                              [x.strip() for x in body.expert if x.strip()], u.email, progress)
-            e.store.blobs.delete(body.path)
-            return out
-
-        return run_job(e, body.job_id, "training", u, go)
 
     @app.get("/v1/deals/{deal_id}/export")
     def export(deal_id: int, format: str = "pdf", include: str = "all", u: User = Depends(user),

@@ -5,9 +5,10 @@ scripts/scheduler_setup.sh). GitHub starts scheduled runs late or skips them, so
 later in the morning and send only if nothing went out yet. Needs FIREBASE_PROJECT_ID, FIREBASE_SERVICE_ACCOUNT_JSON
 and RESEND_API_KEY; APP_URL adds the links to each deal.
 
-    uv run python scripts/daily_email.py [--dry-run] [--now] [--check]
+    uv run python scripts/daily_email.py [--dry-run] [--now] [--owner] [--check]
 
---now sends immediately, even if today's email already went out (manual runs from GitHub use it, to test).
+--now sends immediately, even if today's email already went out, to everyone (a test).
+--owner sends today's email now to the owner only (LOGIN_AS_OWNER): manual runs from GitHub use it, to test.
 --check sends nothing and prints only where the data comes from and how links look (Run workflow → check only).
 --dry-run prints the email (it holds deal details: never in the public Actions logs).
 """
@@ -23,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from titleagent.config import load_secrets  # noqa: E402
 from titleagent.daily import build, send_summary  # noqa: E402
-from titleagent.emailer import EASTERN, recipients_for  # noqa: E402
+from titleagent.emailer import EASTERN, recipients_for, send  # noqa: E402
 from titleagent.storage import open_store  # noqa: E402
 
 
@@ -49,6 +50,15 @@ def main() -> int:
               f"recipients: {len(recipients_for(settings))} · Resend key set: {bool(secrets.resend_api_key)}")
         return 0
 
+    if "--owner" in sys.argv:  # a test for the owner only: nothing recorded, the team gets nothing
+        owner = (os.environ.get("LOGIN_AS_OWNER") or "").strip()
+        if not owner or not secrets.resend_api_key:
+            print("Skipped: LOGIN_AS_OWNER and RESEND_API_KEY must be set as GitHub Actions secrets.")
+            return 1
+        subject, html = build(store, day, os.environ.get("APP_URL", ""))
+        send(secrets.resend_api_key, settings["email_from"], [owner], subject, html)
+        print("Test sent to the owner (1 recipient).")
+        return 0
     _, message = send_summary(store, secrets, now, os.environ.get("APP_URL", ""), force="--now" in sys.argv)
     print(message)
     return 0

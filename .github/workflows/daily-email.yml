@@ -7,7 +7,7 @@ on:
   schedule:
     - cron: "37 13 * * 1-5"  # 9:37 / 8:37 AM
     - cron: "37 15 * * 1-5"  # 11:37 / 10:37 AM
-  workflow_dispatch:  # Run workflow: sends a test email right away (or, with "check only", sends nothing)
+  workflow_dispatch:  # Run workflow: sends today's email right away to the owner only (a test); "check only" sends nothing
     inputs:
       check_only:
         description: "Check only: send nothing, just show where the data comes from"
@@ -35,9 +35,10 @@ jobs:
           HUB_SYNC_SECRET: ${{ secrets.HUB_SYNC_SECRET }}
           HUB_URL: ${{ vars.HUB_URL }}
           APP_URL: ${{ vars.APP_URL }}
-      - run: uv run --no-sync python scripts/daily_email.py ${{ inputs.check_only && '--check' || github.event_name == 'workflow_dispatch' && '--now' || '' }}
+      - run: uv run --no-sync python scripts/daily_email.py ${{ inputs.check_only && '--check' || github.event_name == 'workflow_dispatch' && '--owner' || '' }}
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          LOGIN_AS_OWNER: ${{ secrets.LOGIN_AS_OWNER }}  # manual runs send the test to the owner only
           APP_URL: ${{ vars.APP_URL }}  # https://title.totalchb.com

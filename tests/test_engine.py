@@ -1,5 +1,5 @@
 """The v2 engine end to end: sign-in rules, upload → read → confirm → review, re-run, exports, list edits, report
-missing, training, admin actions. Firestore via the emulator; scripted AI answers; made-up sample data."""
+missing, admin actions. Firestore via the emulator; scripted AI answers; made-up sample data."""
 
 from urllib.parse import unquote
 
@@ -157,17 +157,6 @@ def test_admin_actions(setup):
     assert "Check final water bills on every deal." in store.active_lessons()
     client.patch(f"/v1/lessons/{lesson_id}", headers=h("owner"), json={"active": False})
     assert "Check final water bills on every deal." not in store.active_lessons()
-
-
-def test_training_through_the_engine(setup):
-    client, store = setup
-    store.blobs.put("uploads/u-tc/t.pdf", demo.sample_commitment_pdf(), "application/pdf")
-    r = client.post("/v1/training", headers=h("tc"), json={"job_id": "job-train-01", "path": "uploads/u-tc/t.pdf",
-                                                            "deal_type": "Wholesale (Assignment)", "name": "Sample",
-                                                            "expert": []})
-    assert r.status_code == 200, r.text
-    out = r.json()
-    assert out["blockers"] == len(out["extra"]) and store.list_examples()[0]["name"] == "Sample"
 
 
 def test_morning_run_only_for_the_scheduler_and_sends_once(setup, monkeypatch):
@@ -421,3 +410,55 @@ def test_moving_an_item_teaches_the_agent_and_lien_search_blockers_dont():
     assert key in [p["key"] for p in hub.payload(store, deal_id)["blockers"]]
     client.patch(f"/v1/deals/{deal_id}/items", headers=h("tc"), json={"key": key, "priority": "before"})
     assert len(store.list_feedback(status=None)) == before  # moving it teaches nothing either
+
+
+def test_the_team_adds_to_the_checklist_with_the_password(monkeypatch):
+    """Owner 2026-11-19: Knowledge → Add A Check with the CHECKLIST password. The check goes into the agent's
+    checklist from the next review; only the team's own checks can be removed; wrong passwords lock out a while."""
+    from tests.conftest import firestore_store
+    from titleagent import checklist, prompts
+
+    store = firestore_store()
+    store.set_setting("checklist_extra", [])
+    body = {"group": "Taxes & Assessments", "name": "Made-up final water reading",
+            "look_for": "Where unpaid water bills become liens, order a final reading and list the payoff."}
+    off = TestClient(create_app(Engine(secrets=Secrets(None, None, None), store=store, llm=demo.scripted_llm,
+                                       verify=verify)))
+    assert off.post("/v1/checklist", headers=h("tc"), json={**body, "password": "x"}).status_code == 503
+    client = TestClient(create_app(Engine(secrets=Secrets(None, None, None, checklist_password="made-up-pw"),
+                                          store=store, llm=demo.scripted_llm, verify=verify)))
+    assert client.post("/v1/checklist", json={**body, "password": "made-up-pw"}).status_code == 401
+    assert client.post("/v1/checklist", headers=h("tc"), json={**body, "password": "nope"}).status_code == 403
+    r = client.post("/v1/checklist", headers=h("tc"), json={**body, "password": "made-up-pw"})
+    assert r.status_code == 200 and r.json() == {"id": "TM1"}
+    assert client.post("/v1/checklist", headers=h("tc"), json={**body, "password": "made-up-pw"}).status_code == 400
+    other = {**body, "name": "Other", "group": "Made-up group", "password": "made-up-pw"}
+    assert client.post("/v1/checklist", headers=h("tc"), json=other).status_code == 400
+    [saved] = store.get_settings()["checklist_extra"]
+    assert (saved["id"], saved["group"], saved["by"]) == ("TM1", "Taxes & Assessments", "pat.tc@totalchb.com")
+    checklist.use(store.get_settings()["checklist_extra"])  # what every review does first
+    assert "[TM1] Made-up final water reading (Taxes & Assessments)" in prompts.system_prompt([])
+    assert [c.id for c in checklist.all_checks()].count("TM1") == 1
+    assert "TM1" in [c.id for c in checklist.for_deal("Fix & Flip")]
+    # built-in checks stay; the team's go with the password
+    assert client.post("/v1/checklist/V1/remove", headers=h("tc"), json={"password": "made-up-pw"}).status_code == 404
+    assert client.post("/v1/checklist/TM1/remove", headers=h("tc"), json={"password": "made-up-pw"}).status_code == 200
+    assert store.get_settings()["checklist_extra"] == []
+    checklist.use([])
+    for _ in range(5):
+        client.post("/v1/checklist", headers=h("tc"), json={**body, "password": "wrong"})
+    assert client.post("/v1/checklist", headers=h("tc"), json={**body, "password": "made-up-pw"}).status_code == 429
+
+
+def test_send_me_a_test_email_goes_to_the_manager_only(setup, monkeypatch):
+    from titleagent import emailer
+
+    _, store = setup
+    sent = []
+    monkeypatch.setattr(emailer, "send", lambda key, sender, to, subject, html, deliver_at=None:
+                        sent.append((to, subject)))
+    client = TestClient(create_app(Engine(secrets=Secrets(None, None, "k"), store=store,
+                                          llm=demo.scripted_llm, verify=verify)))
+    r = client.post("/v1/email/test", headers=h("tc"))
+    assert r.status_code == 200 and r.json()["to"] == "pat.tc@totalchb.com"
+    assert sent[0][0] == ["pat.tc@totalchb.com"] and sent[0][1].startswith("Title Commitment & Lien Agent: ")

@@ -1,5 +1,5 @@
 """The Title Commitment & Lien Agent's flows without any screen: read the documents, confirm and review, re-run,
-train, export.
+move items, export.
 The v2 engine (engine/main.py) runs these; `progress` gets a short line for the page to show while the agent works.
 `store` is a firestore_store.FirestoreStore (storage.open_store)."""
 
@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Callable
 from datetime import date
 
-from titleagent import duedates, pipeline, prompts, training
+from titleagent import checklist, duedates, pipeline, prompts
 from titleagent.exports import INCLUDE, Checklist, checklist_for, document, tabular
 from titleagent.llm import LLM, Usage
 from titleagent.models import (
@@ -45,6 +45,7 @@ def read(store, llm: LLM, commitment: bytes, commitment_name: str, by: str, cont
          contract_name: str = "", update_for: int | None = None, progress: Progress = None) -> dict:
     """Step 1 (Analyze): saves the documents, reads them, runs the numbering check. Returns the draft the confirm
     screen shows: what the agent read, prefilled deal fields and the numbering result."""
+    checklist.use(store.get_settings().get("checklist_extra"))  # the team's own checks too
     if not is_pdf(commitment):
         raise FlowError("Upload the title commitment as a PDF.")
     if contract and not is_pdf(contract):
@@ -95,6 +96,7 @@ def _deal_info(deal: dict) -> pipeline.DealInfo:
 def _review(store, llm: LLM, deal_id: int, documents: pipeline.Documents, structure: StructureOut, gaps: dict,
             commitment_doc_id: int, contract_doc_id: int | None, updated_commitment: bool, by: str,
             usage: Usage, progress: Progress) -> int:
+    checklist.use(store.get_settings().get("checklist_extra"))
     analysis = pipeline.review(llm, documents, structure, _deal_info(store.get_deal(deal_id)),
                                store.active_lessons(), usage, gaps, previous=store.get_items(deal_id),
                                updated_commitment=updated_commitment,
@@ -146,40 +148,6 @@ def rerun(store, llm: LLM, deal_id: int, by: str, progress: Progress = None) -> 
     _review(store, llm, deal_id, documents, structure, {}, com["id"], con["id"] if con else None, False, by,
             Usage(), progress)
     return deal_id
-
-
-def train(store, llm: LLM, data: bytes, filename: str, deal_type: str, name: str, expert: list[str], by: str,
-          progress: Progress = None) -> dict:
-    """Training: review a worked commitment and compare with the closer's list. Every miss becomes a suggested
-    lesson in the Feedback Inbox. Returns the comparison for the page."""
-    if not is_pdf(data):
-        raise FlowError("Upload the commitment as a PDF.")
-    documents = pipeline.Documents(data)
-    lessons = store.active_lessons()
-    usage = Usage()
-    structure, gaps = pipeline.read_documents(llm, documents, lessons, usage, progress)
-    analysis = pipeline.review(llm, documents, structure, pipeline.DealInfo(deal_type=deal_type), lessons, usage,
-                               gaps, progress=progress)
-    blockers = [i for i in analysis.items if i.priority == "blocker"]
-    if expert:
-        if progress:
-            progress("Matching the agent's list to the closer's list")
-        result = training.compare(llm, documents, prompts.system_prompt(lessons), expert, analysis.items, usage)
-    else:  # clean title: everything the agent marked a blocker is an extra
-        result = training.Comparison(matched=[], missed=[], extra=blockers)
-    doc_id = store.save_document(data, filename, "training", by=by)
-    example_id = store.add_example(name or filename, doc_id, expert, deal_type, by=by)
-    store.add_score(example_id, result.recall, len(result.matched), len(result.matched) + len(result.missed),
-                    len(lessons))
-    for item, lesson in result.missed:
-        store.add_feedback("training", item, by=by, detail={"suggested_lesson": lesson, "example_id": example_id})
-    return {
-        "example_id": example_id, "recall": result.recall, "blockers": len(blockers), "cost_usd": usage.cost,
-        "matched": [{"expert": e, "title": i.title, "priority": i.priority} for e, i in result.matched],
-        "missed": [{"expert": e, "lesson": lesson} for e, lesson in result.missed],
-        "extra": [{"title": i.title, "priority": i.priority, "refs": [s.ref for s in i.sources]}
-                  for i in result.extra],
-    }
 
 
 def export(store, deal_id: int, fmt: str, include: str = "all") -> tuple[bytes, Checklist]:

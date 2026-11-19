@@ -770,3 +770,5 @@ pre.code { margin: 0; padding: 14px; max-height: 320px; overflow: auto; border-r
   line-height: 1.4; color: var(--text-muted); max-width: 260px; }
 span.person-chip { cursor: default; }
 .row-sub.learned { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 13px; }
+.check-line { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; font-size: 14px; }
+.check-line .chip { padding: 1px 8px; font-size: 11px; }

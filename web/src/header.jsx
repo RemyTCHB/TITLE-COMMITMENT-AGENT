@@ -14,7 +14,7 @@ import { Icon, Menu, Modal, Seg, Spinner, initials, useMenu, useToast } from './
 
 const TABS = [
   { value: 'deals', label: 'Deals' }, { value: 'analyze', label: 'Analyze' },
-  { value: 'training', label: 'Training' }, { value: 'knowledge', label: 'Knowledge' },
+  { value: 'knowledge', label: 'Knowledge' },
 ];
 
 const HEAD = { live: 'Live: Everything Is Saved', saving: 'Saving…', unsaved: 'Not Saved', offline: 'Offline',

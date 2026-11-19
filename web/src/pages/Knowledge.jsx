@@ -1,11 +1,11 @@
-// Knowledge: the Feedback Inbox (admins turn feedback into lessons), the lessons the agent follows on every deal,
-// training examples with their latest score, and the professional checklist.
+// Knowledge: the Feedback Inbox (admins turn feedback into lessons), the lessons the agent follows on every deal, and
+// the professional checklist, which the team can add to with the checklist password (owner 2026-11-19).
 import { collection, onSnapshot } from 'firebase/firestore';
 import { useEffect, useState } from 'preact/hooks';
 import { api } from '../api.js';
-import { useReference } from '../data.js';
+import { useReference, useSettings } from '../data.js';
 import { db } from '../firebase.js';
-import { Icon, PageTitle, Spinner, useToast, when } from '../ui.jsx';
+import { Icon, Modal, PageTitle, Seg, Spinner, useToast, when } from '../ui.jsx';
 
 const KIND = { missing: 'Missing Item', not_needed: 'Not Needed', wrong: 'Wrong Info', training: 'Training Gap',
   moved: 'Moved Section' };
@@ -94,24 +94,93 @@ function LessonRow({ x, admin }) {
   );
 }
 
+const TEAM_GROUP = 'Team Additions';
+
+// Add A Check: something the agent looks for on every file (or the deal types picked), from the next review. Needs the
+// checklist password (the CHECKLIST secret); the engine checks it and never keeps or logs what was typed.
+function AddCheck({ reference, onClose }) {
+  const toast = useToast();
+  const groups = [...(reference?.checklist || []).map(g => g.group).filter(g => g !== TEAM_GROUP), TEAM_GROUP];
+  const [f, setF] = useState({ group: TEAM_GROUP, name: '', look_for: '', deal_types: [], password: '' });
+  const [busy, setBusy] = useState(false);
+  const set = k => e => setF({ ...f, [k]: e.currentTarget.value });
+  const flip = t => setF({ ...f, deal_types: f.deal_types.includes(t) ? f.deal_types.filter(x => x !== t) : [...f.deal_types, t] });
+  const send = async () => {
+    setBusy(true);
+    try { await api.addCheck(f); toast('Added to the checklist: the agent runs it from the next review.'); onClose(); }
+    catch (e) { toast(e.message, true); setBusy(false); }
+  };
+  return (
+    <Modal title="Add A Check" onClose={onClose}>
+      <p class="row-sub" style="margin:0">Something to look for on every file, the way a seasoned title agent would.
+        Write it as a general rule: no names, addresses, amounts or numbers from one deal.</p>
+      <label class="field"><span>Group</span>
+        <select class="input" value={f.group} onChange={set('group')}>{groups.map(g => <option key={g}>{g}</option>)}</select></label>
+      <label class="field"><span>Check</span>
+        <input class="input" value={f.name} onInput={set('name')} placeholder="e.g. Final water and sewer readings" /></label>
+      <label class="field"><span>What To Look For</span>
+        <textarea class="input" rows={3} value={f.look_for} onInput={set('look_for')}
+          placeholder="e.g. In cities that lien unpaid water or sewer bills, order a final reading and list the payoff as a Closing Blocker." /></label>
+      <div class="field"><span>Deal Types (None Picked: Every Deal)</span>
+        <div class="people-pick">{(reference?.deal_types || []).map(t => (
+          <button key={t} type="button" class="person-chip" aria-pressed={f.deal_types.includes(t)} style="padding:6px 12px"
+            onClick={() => flip(t)}>{t}{f.deal_types.includes(t) && <Icon name="check" size={14} stroke={3} />}</button>))}</div></div>
+      <label class="field"><span>Checklist Password</span>
+        <input class="input" type="password" autocomplete="off" value={f.password} onInput={set('password')}
+          onKeyDown={e => e.key === 'Enter' && send()} /></label>
+      <div class="actions">
+        <button class="btn ghost pill" onClick={onClose}>Cancel</button>
+        <button class="btn primary pill" disabled={busy || f.name.trim().length < 3 || f.look_for.trim().length < 10 || !f.password}
+          onClick={send}>{busy ? <Spinner /> : <Icon name="plus" />} Add Check</button>
+      </div>
+    </Modal>
+  );
+}
+
+function RemoveCheck({ check, onClose }) {
+  const toast = useToast();
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    setBusy(true);
+    try { await api.removeCheck(check.id, password); toast('Removed from the checklist.'); onClose(); }
+    catch (e) { toast(e.message, true); setBusy(false); }
+  };
+  return (
+    <Modal title="Remove This Check?" onClose={onClose}>
+      <p class="lede" style="font-size:15px"><b>{check.name}</b>: the agent stops running it from the next review.</p>
+      <label class="field"><span>Checklist Password</span>
+        <input class="input" type="password" autocomplete="off" value={password} onInput={e => setPassword(e.currentTarget.value)}
+          onKeyDown={e => e.key === 'Enter' && password && send()} /></label>
+      <div class="actions">
+        <button class="btn ghost pill" onClick={onClose}>Cancel</button>
+        <button class="btn primary pill" disabled={busy || !password} onClick={send}>{busy && <Spinner />} Remove Check</button>
+      </div>
+    </Modal>
+  );
+}
+
 export function Knowledge({ me }) {
   const toast = useToast();
   const ref = useReference();
   const admin = !!me?.can?.approve_lessons;  // Settings → Permissions (managers always)
   const feedback = useCol('feedback');
   const lessons = useCol('lessons');
-  const examples = useCol('examples');
-  const scores = useCol('scores');
+  const settings = useSettings();
   const [newLesson, setNewLesson] = useState('');
   const [showChecklist, setShowChecklist] = useState(false);
+  const [dialog, setDialog] = useState(null);  // 'add' or a team check to remove
   const inbox = (feedback || []).filter(f => f.status === 'pending').sort((a, b) => b.id - a.id);
   const all = (lessons || []).sort((a, b) => a.id - b.id);
   const active = all.filter(x => x.active);
-  const latest = {};
-  for (const s of [...(scores || [])].sort((a, b) => (a.run_at?.seconds || 0) - (b.run_at?.seconds || 0))) latest[s.example_id] = s;
-  const matched = Object.values(latest).reduce((n, s) => n + s.matched, 0);
-  const total = Object.values(latest).reduce((n, s) => n + s.total, 0);
-  const checks = (ref?.checklist || []).reduce((n, g) => n + g.checks.length, 0);
+  const learned = all.filter(x => x.ref).length;
+  // the built-in checks (from the engine) and the team's own (settings "checklist_extra", live)
+  const team = (settings?.checklist_extra || []).map(c => ({ ...c, deal_types: c.deal_types || [], team: true }));
+  const groups = [...(ref?.checklist || []).map(g => g.group), ...team.map(c => c.group || TEAM_GROUP)]
+    .filter((g, n, a) => a.indexOf(g) === n)
+    .map(g => ({ group: g, checks: [...((ref?.checklist || []).find(x => x.group === g)?.checks || []),
+      ...team.filter(c => (c.group || TEAM_GROUP) === g)] }));
+  const checks = groups.reduce((n, g) => n + g.checks.length, 0);
   const add = async () => {
     try { await api.addLesson(newLesson.trim()); setNewLesson(''); toast('Lesson added: it applies from the next review.'); }
     catch (e) { toast(e.message, true); }
@@ -120,15 +189,15 @@ export function Knowledge({ me }) {
     <>
       <PageTitle>Team <span class="accent">Knowledge</span></PageTitle>
       <div class="tiles">
-        <div class="card tile"><span>Finds Expert Items</span><b class={total ? 'green' : 'muted'}>{total ? `${Math.round((100 * matched) / total)}%` : '—'}</b>
-          <small>{total ? `across ${Object.keys(latest).length} training example(s)` : 'run Training to measure'}</small></div>
         <div class="card tile"><span>Active Lessons</span><b>{active.length}</b><small>{all.length - active.length} turned off</small></div>
-        <div class="card tile"><span>Pro Checklist</span><b>{checks || '—'}</b><small>checks across {(ref?.checklist || []).length} groups</small></div>
+        <div class="card tile"><span>Learned From The Team</span><b class={learned ? 'green' : 'muted'}>{learned}</b>
+          <small>lessons from moved and missing items</small></div>
+        <div class="card tile"><span>Pro Checklist</span><b>{checks || '—'}</b><small>{team.length} added by the team · {groups.length} groups</small></div>
         <div class="card tile"><span>Feedback Waiting</span><b class={inbox.length ? 'red' : 'green'}>{inbox.length}</b>
           <small>{inbox.length ? 'needs approving' : 'inbox is empty'}</small></div>
       </div>
 
-      <div class="section-head"><h2>Feedback Inbox</h2><p>From items moved to another section, Report Missing Item, item feedback and training gaps. The agent drafts each lesson; approve it to use it from the next review.</p></div>
+      <div class="section-head"><h2>Feedback Inbox</h2><p>From items moved to another section, Report Missing Item and item feedback. The agent drafts each lesson; approve it to use it from the next review.</p></div>
       {feedback === undefined ? <Spinner /> : inbox.length ? (
         <div class="list">{inbox.map(f => <InboxCard key={f.id} f={f} admin={admin} />)}</div>
       ) : <div class="note green">Inbox is empty. Every piece of feedback has been reviewed.</div>}
@@ -143,28 +212,22 @@ export function Knowledge({ me }) {
           <button class="btn primary" disabled={!newLesson.trim()} onClick={add}><Icon name="plus" /> Add Lesson</button>
         </div>)}
 
-      <div class="section-head"><h2>Training Examples</h2><p>Re-run any of them from Training after lessons change.</p></div>
-      {(examples || []).length ? (
-        <div class="list">{[...examples].sort((a, b) => a.id - b.id).map(e => {
-          const s = latest[e.id];
-          return (
-            <div key={e.id} class="card row-card p-fyi col">
-              <span class="row-title" style="font-size:15px">{e.name}</span>
-              <span class="row-sub">{e.deal_type} · {(e.expert_items || []).length} closer item(s)
-                {s ? ` · agent found ${s.matched}/${s.total} on ${when(s.run_at)}` : ''}</span>
-            </div>);
-        })}</div>
-      ) : <div class="note">No training examples yet. Add them on the Training tab.</div>}
-
-      <div class="section-head"><h2>The Professional Checklist</h2><p>What the agent checks on every deal.</p>
+      <div class="section-head"><h2>The Professional Checklist</h2><p>What the agent checks on every deal. Anyone with
+        the checklist password can add to it.</p>
+        <button class="link-btn" onClick={() => setDialog('add')}><Icon name="plus" /> Add A Check</button>
         <button class="link-btn" onClick={() => setShowChecklist(!showChecklist)}>{showChecklist ? 'Hide' : 'Show'} All {checks}</button></div>
-      {showChecklist && (ref?.checklist || []).map(g => (
+      {showChecklist && groups.map(g => (
         <section key={g.group} class="card" style="padding:16px 20px;display:flex;flex-direction:column;gap:8px">
           <h3 style="font-size:17px">{g.group}</h3>
           {g.checks.map(c => (
-            <div key={c.id} style="font-size:14px"><b style="color:var(--tchb-indigo-700)">{c.name}</b>
-              {c.deal_types.length ? <span class="row-sub"> (only {c.deal_types.join(', ')})</span> : ''}: {c.look_for}</div>))}
+            <div key={c.id} class="check-line"><span><b style="color:var(--tchb-indigo-700)">{c.name}</b>
+              {c.deal_types.length ? <span class="row-sub"> (only {c.deal_types.join(', ')})</span> : ''}: {c.look_for}
+              {c.team && <span class="row-sub"> · <span class="chip green">Team</span> added by {c.by} {c.at ? `on ${when(c.at)}` : ''}</span>}</span>
+              {c.team && <button class="mini muted" title="Remove this check" aria-label={`Remove ${c.name}`} onClick={() => setDialog(c)}>
+                <Icon name="x" /></button>}</div>))}
         </section>))}
+      {dialog === 'add' && <AddCheck reference={ref} onClose={() => { setDialog(null); setShowChecklist(true); }} />}
+      {dialog && dialog !== 'add' && <RemoveCheck check={dialog} onClose={() => setDialog(null)} />}
     </>
   );
 }

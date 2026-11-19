@@ -141,17 +141,42 @@ CHECKS: list[Check] = [
 ]
 
 GROUPS = list(dict.fromkeys(c.group for c in CHECKS))
+TEAM_GROUP = "Team Additions"
+
+# Checks the team added (owner 2026-11-19: Knowledge → Add A Check, with the CHECKLIST password; ids TM1, TM2…), kept
+# in the app database (settings "checklist_extra") and loaded at the start of each review (use()), so every instance
+# and step uses the same list. General rules only: no names, addresses, amounts or numbers from one deal.
+_team: tuple[Check, ...] = ()
+
+
+def team_check(d: dict) -> Check:
+    types = tuple(d.get("deal_types") or ())
+    return Check(d["id"], d.get("group") or TEAM_GROUP, d["name"], d["look_for"], types or ALL)
+
+
+def use(extra: list[dict] | None) -> None:
+    """The team's own checks, from the database, for the reviews that follow."""
+    global _team
+    _team = tuple(team_check(d) for d in (extra or []) if d.get("id") and d.get("name") and d.get("look_for"))
+
+
+def all_checks() -> list[Check]:
+    return CHECKS + list(_team)
+
+
+def groups() -> list[str]:
+    return list(dict.fromkeys(c.group for c in all_checks()))
 
 
 def for_deal(deal_type: str) -> list[Check]:
-    return [c for c in CHECKS if c.applies(deal_type)]
+    return [c for c in all_checks() if c.applies(deal_type)]
 
 
 def as_prompt() -> str:
     """Every check, with the deal types it is limited to. The same text on every call, so it stays cached; the
     step's task names the deal type."""
     lines = []
-    for c in CHECKS:
+    for c in all_checks():
         scope = "" if c.deal_types == ALL else f" [only for: {', '.join(c.deal_types)}]"
         lines.append(f"- [{c.id}] {c.name} ({c.group}){scope}: {c.look_for}")
     return "\n".join(lines)

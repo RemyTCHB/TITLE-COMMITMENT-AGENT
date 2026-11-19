@@ -56,6 +56,11 @@ export function Settings({ me, onHelp }) {
       toast('Saved.');
     } catch (e) { toast(e.message, true); } finally { setBusy(''); }
   };
+  const testEmail = async () => {
+    setBusy('email');
+    try { const r = await api.testEmail(); toast(`Sent to ${r.to}: "${r.subject}".`); }
+    catch (e) { toast(e.message, true); } finally { setBusy(''); }
+  };
   const testFolder = async () => {
     setBusy('check'); setCheck(null);
     try { setCheck(await api.googleCheck()); } catch (e) { setCheck({ ok: false, message: e.message }); } finally { setBusy(''); }
@@ -122,6 +127,11 @@ export function Settings({ me, onHelp }) {
             </div>
           </div>
           <label class="field"><span>Send From</span><input class="input" value={f.email_from} onInput={set('email_from')} /></label>
+          <div class="toolbar">
+            <button class="btn glass pill sm" type="button" onClick={testEmail} disabled={!!busy}>
+              {busy === 'email' ? <Spinner /> : <Icon name="note" />} Send Me A Test Email</button>
+            <span class="row-sub">Today's email as it stands now (with the day before's clears), to you only.</span>
+          </div>
         </section>
 
         <section class="card" style="padding:24px;display:flex;flex-direction:column;gap:14px">

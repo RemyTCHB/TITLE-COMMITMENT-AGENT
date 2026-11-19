@@ -7,9 +7,9 @@ import { callDone, callStarted } from './status.js';
 export class ApiError extends Error {}
 
 // Repeating these is safe (Retry Now on the Live clock): reads, settings and item changes, and the jobs that carry a job
-// id (re-run, review, training) or make an export. Others (Report Missing Item, feedback, a new lesson) would be done
+// id (re-run, review) or make an export. Others (Report Missing Item, feedback, a new lesson) would be done
 // twice, so the clock asks the person to do them again instead.
-const SAFE_POST = /\/(rerun|review|training|google|google\/check)$/;
+const SAFE_POST = /\/(rerun|review|google|google\/check)$/;
 
 async function call(method, path, body, opts = {}) {
   callStarted();
@@ -57,7 +57,6 @@ export const api = {
   read: body => call('POST', '/v1/read', body),
   review: body => call('POST', '/v1/review', body),
   rerun: (dealId, job_id) => call('POST', `/v1/deals/${dealId}/rerun`, { job_id }),
-  training: body => call('POST', '/v1/training', body),
   setItem: (dealId, body) => call('PATCH', `/v1/deals/${dealId}/items`, body),
   setDeal: (dealId, status) => call('PATCH', `/v1/deals/${dealId}`, { status }),
   missing: (dealId, body) => call('POST', `/v1/deals/${dealId}/missing`, body),
@@ -66,10 +65,13 @@ export const api = {
   google: (dealId, kind, include) => call('POST', `/v1/deals/${dealId}/google`, { kind, include }),
   resolve: (id, approve, lesson) => call('POST', `/v1/feedback/${id}/resolve`, { approve, lesson }),
   addLesson: text => call('POST', '/v1/lessons', { text }),
+  addCheck: body => call('POST', '/v1/checklist', body),
+  removeCheck: (id, password) => call('POST', `/v1/checklist/${id}/remove`, { password }),
   setLesson: (id, body) => call('PATCH', `/v1/lessons/${id}`, body),
   putSettings: body => call('PUT', '/v1/settings', body),
   putTeam: body => call('PUT', '/v1/team', body),
   googleCheck: () => call('POST', '/v1/google/check'),
+  testEmail: () => call('POST', '/v1/email/test'),
   helpPasswords: () => call('GET', '/v1/help/passwords'),
   loginAs: email => call('POST', '/v1/login-as', { email }),
   loginBack: () => call('POST', '/v1/login-as/back'),

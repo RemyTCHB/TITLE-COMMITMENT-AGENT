@@ -18,7 +18,6 @@ import { Team } from './pages/Team.jsx';
 import { HelpPanel } from './pages/Help.jsx';
 import { watchConnection } from './data.js';
 import { startPresence } from './presence.js';
-import { Training } from './pages/Training.jsx';
 
 function Gate({ error, busy, onSignIn }) {
   return (
@@ -89,7 +88,6 @@ function App() {
           : !user ? <Gate error={error} busy={busy} onSignIn={doSignIn} />
             : page === 'deal' ? <Deal id={arg} me={me} />
               : page === 'analyze' ? <Analyze arg={arg} sub={sub} />
-                : page === 'training' ? <Training />
                   : page === 'knowledge' ? <Knowledge me={me} />
                     : page === 'team' ? <Team me={me} />
                       : page === 'settings' ? <Settings me={me} onHelp={() => setHelp(true)} />

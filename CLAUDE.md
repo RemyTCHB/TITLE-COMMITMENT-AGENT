@@ -80,7 +80,13 @@ sync when a rule changes. (The first Streamlit version and its Neon database wer
   update it; moving back withdraws it); items people added just move. For moved and missing items the agent drafts
   the general rule in the background (`flows.draft_lesson`, step "lesson", `prompts.LESSON_SYSTEM`) for the Feedback
   Inbox; an approved lesson keeps `ref` (kind, item, deal, address, who, from / to) for Knowledge's "Learned from".
-  Learning comes from moves, missing items and manual lessons; Training only measures.
+  Learning comes from moves, missing items and manual lessons. **No Training tab** (owner 2026-11-19: removed, with
+  `/v1/training` and `flows.train`); `titleagent/training.py` stays for `scripts/evaluate.py` (offline accuracy).
+- The professional checklist (`titleagent/checklist.py`): the built-in checks, plus the team's own (owner 2026-11-19:
+  Knowledge → Add A Check, `POST /v1/checklist`, removal `POST /v1/checklist/{id}/remove`; only with the password in
+  the GitHub secret `CHECKLIST`, compared server-side, never logged; 5 wrong tries in 10 minutes lock that person out
+  for the rest). They're kept in settings `checklist_extra` (ids TM1, TM2…) and loaded by `checklist.use()` at the
+  start of each read / review, so the system prompt and coverage include them. General rules only.
 - Permissions (`settings.permissions`, Settings): what Team Leaders and Members may do (`approve_lessons`,
   `report_missing`); Managers always can. The engine checks them (`allowed()` in `engine/main.py`); `/v1/me` returns
   `role` and `can` for the page.
@@ -97,7 +103,9 @@ sync when a rule changes. (The first Streamlit version and its Neon database wer
   cleared the day before listed, on Mondays Friday–Sunday, from items' `cleared_at`, set by `update_item`):
   Google Cloud Scheduler calls the engine
   (`POST /v1/tasks/morning`, `titleagent/daily.py`, set up once with `scripts/scheduler_setup.sh`), which sends it via
-  Resend; `scripts/daily_email.py` on GitHub Actions is only the later backup (GitHub runs late or skips).
+  Resend; `scripts/daily_email.py` on GitHub Actions is only the later backup (GitHub runs late or skips). Tests:
+  Settings → Send Me A Test Email (`POST /v1/email/test`, Managers, to that person only) and Run workflow on
+  daily-email.yml (`--owner`: to the `LOGIN_AS_OWNER` address only); neither is recorded or reaches the team.
 - Exports (owner 2026-10-30): every export is also saved in the team's Google Drive folder (Settings), in a folder
   per type (PDF, Word, Excel, CSV, Google Sheets, Google Docs; made the first time) with the date and time in its
   name; PDF / Word / Excel / CSV still download to the person's computer, Google Sheets / Docs go only to Drive. The
