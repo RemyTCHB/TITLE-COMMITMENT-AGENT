@@ -338,13 +338,14 @@ def test_daily_email_overdue_and_cleared_the_day_before():
     takes Due Soon's place and Cleared (the Closing Blockers cleared the day before) the last."""
     deals = [{"id": 1, "address": "1 Sample St", "deal_type": "Wholesale (Assignment)", "closing_date": None,
               "tc": "Pat"}]
-    items = {1: [item("Mortgage payoff", due="2026-11-17"), item("Tax lien", due="2026-11-30")]}
+    items = {1: [item("Mortgage payoff", due="2026-11-17"), item("Tax lien", due="2026-11-30", origin="lien_search")]}
     done = item("Made-up judgment release", status="Cleared")
     subject, html = summary_html(deals, items, date(2026, 11, 19), "https://title.totalchb.com",
                                  cleared=[(deals[0], done)])
     assert subject == "Title Commitment & Lien Agent: 2 Closing Blockers, 1 Overdue, 1 Cleared (Nov 18)"
     assert "Due Soon" not in html and html.index(">Overdue<") < html.index(">Cleared Nov 18<")
     assert "Made-up judgment release" in html and "Title Commitment &amp; Lien" in html
+    assert html.count("Lien Search Blocker</span>") == 1  # its label, as on the deal
     # Mondays cover Friday through Sunday
     assert window(date(2026, 11, 23))[2] == "Nov 20–22" and window(date(2026, 11, 19))[2] == "Nov 18"
     assert window(date(2026, 12, 1))[2] == "Nov 30" and window(date(2026, 11, 2))[2] == "Oct 30–Nov 1"

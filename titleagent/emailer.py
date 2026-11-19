@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from titleagent.models import DONE_STATUSES, ActionItem, time_text
+from titleagent.models import DONE_STATUSES, LIEN_SEARCH, ActionItem, time_text
 
 RESEND_URL = "https://api.resend.com/emails"
 LAST_RUN = "email_last_run"  # settings key the daily script writes, Settings reads
@@ -80,7 +80,7 @@ def _row(i: ActionItem, today: date) -> str:
     """One item, one line: a dot in the priority's color, the headline, and the due date on the right."""
     return (f'<tr><td width="16" valign="top" style="padding:7px 0 0">{_dot(BAR.get(i.priority, INDIGO))}</td>'
             f'<td valign="top" style="{TEXT};font-size:14px;line-height:1.4;color:{INK};padding:3px 8px 3px 0">'
-            f"{escape(i.title)}</td>"
+            f"{_chip(LIEN_SEARCH, RED, RED_BG, 11) + ' ' if i.origin == 'lien_search' else ''}{escape(i.title)}</td>"
             f'<td valign="top" align="right" style="padding:2px 0;white-space:nowrap">{_due(i, today)}</td></tr>')
 
 
