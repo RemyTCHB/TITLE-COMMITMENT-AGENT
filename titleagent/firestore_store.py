@@ -355,9 +355,14 @@ class FirestoreStore:
             at = d.get("updated_at")
             if isinstance(at, datetime) and at < start:
                 continue
-            for i in self.get_items(d["id"]):
-                if (i.priority == "blocker" and i.status in DONE_STATUSES and i.cleared_at and i.change != "removed"
-                        and start <= datetime.fromisoformat(i.cleared_at) < end):
+            for snap in self.db.collection(f"deals/{d['id']}/items").stream():
+                row = snap.to_dict()
+                i = ActionItem.model_validate(row["data"])
+                if i.priority != "blocker" or i.status not in DONE_STATUSES or i.change == "removed":
+                    continue
+                # cleared_at from 2026-11-19 on; before it, the item's last change stands in for when it was cleared
+                at = datetime.fromisoformat(i.cleared_at) if i.cleared_at else row.get("updated_at")
+                if isinstance(at, datetime) and start <= at < end:
                     out.append((d, i))
         return out
 
