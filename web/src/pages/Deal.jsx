@@ -4,7 +4,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { getDownloadURL, ref } from 'firebase/storage';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { api, jobId } from '../api.js';
-import { DONE, PRIORITY, PRIORITY_ORDER, STATUSES, isOpen, useDeal, useItems, useJob, useLatestRun } from '../data.js';
+import { DONE, PRIORITY, PRIORITY_ORDER, STATUSES, getDealOrder, isOpen, useDeal, useDeals, useItems, useJob, useLatestRun } from '../data.js';
 import { db, storage } from '../firebase.js';
 import { go } from '../router.js';
 import { Bar, DatePicker, Icon, Menu, Modal, Ring, Seg, Spinner, Stat, daysUntil, fmtDate, money, timeText, useMenu, useToast, when } from '../ui.jsx';
@@ -326,6 +326,29 @@ function Records({ deal }) {
   );
 }
 
+// Previous / Next deal (owner 2026-11-19): through the Deals list as it was when this deal was opened from it; opened
+// another way (a link from the email or the hub), through the open deals, most recently changed first.
+function DealNav({ id }) {
+  const { deals } = useDeals();
+  if (!deals) return null;
+  const n = Number(id);
+  const saved = getDealOrder().filter(x => deals.some(d => d.id === x));
+  const order = saved.includes(n) ? saved : deals.filter(d => d.status === 'open').map(d => d.id);
+  const at = order.indexOf(n);
+  if (at < 0 || order.length < 2) return null;
+  const prev = order[at - 1], next = order[at + 1];
+  const name = x => deals.find(d => d.id === x)?.address || `Deal ${x}`;
+  return (
+    <nav class="deal-nav" aria-label="Other deals">
+      {prev ? <a class="link-btn" href={`#/deal/${prev}`} title={name(prev)}><Icon name="back" /> Previous</a>
+        : <span class="link-btn off" aria-hidden="true"><Icon name="back" /> Previous</span>}
+      <span class="deal-nav-n">{at + 1} of {order.length}</span>
+      {next ? <a class="link-btn" href={`#/deal/${next}`} title={name(next)}>Next <Icon name="right" /></a>
+        : <span class="link-btn off" aria-hidden="true">Next <Icon name="right" /></span>}
+    </nav>
+  );
+}
+
 // ---------------------------------------------------------------- the page
 export function Deal({ id, me }) {
   const toast = useToast();
@@ -377,7 +400,11 @@ export function Deal({ id, me }) {
     end.setDate(end.getDate() + a.requirements_deadline_days);
     return end.toISOString().slice(0, 10) < deal.closing_date ? end.toISOString().slice(0, 10) : null;
   })();
-  const shown = p => live.filter(i => i.priority === p && (openOnly === 'all' || isOpen(i)));
+  // open items first, then the cleared / waived ones, each in list order (owner 2026-11-19: done items go down)
+  const shown = p => {
+    const list = live.filter(i => i.priority === p && (openOnly === 'all' || isOpen(i)));
+    return [...list.filter(isOpen), ...list.filter(i => !isOpen(i))];
+  };
   const toggle = key => setExpanded(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
   const card = i => (
     <ItemCard key={i.key} item={i} deal={deal} open={expanded.has(i.key)} onToggle={() => toggle(i.key)}
@@ -394,6 +421,7 @@ export function Deal({ id, me }) {
             {deal.closing_date && (
               <span class={`chip ${days < 0 ? 'red' : days <= 7 ? 'orange' : ''}`}>
                 Closing {fmtDate(deal.closing_date)}{days !== null && days >= 0 ? ` · ${days}d` : ''}</span>)}
+            <DealNav id={id} />
           </div>
           <h1 class="title">{deal.address || `Deal ${deal.id}`}</h1>
           <p class="lede">{[deal.tc && `TC ${deal.tc}`, deal.title_company, a.commitment_number && `Commitment ${a.commitment_number}`]

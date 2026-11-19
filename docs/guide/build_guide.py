@@ -345,7 +345,7 @@ def cover(c, doc) -> None:
     c.drawString(MARGIN, PAGE_H - 6.85 * inch, doc.guide[1])
     c.setFont("Nunito", 10)
     c.setFillColor(MUTED)
-    c.drawString(MARGIN, PAGE_H - 7.12 * inch, f"Version 2.7 · {date.today():%B %Y} · title.totalchb.com")
+    c.drawString(MARGIN, PAGE_H - 7.12 * inch, f"Version 2.8 · {date.today():%B %Y} · title.totalchb.com")
     c.setFillColor(colors.white)
     c.setFont("Nunito-Bold", 9.5)
     c.drawString(MARGIN, 0.62 * inch, "Total Cash Home Buyers · Internal use only")
@@ -421,7 +421,8 @@ def story(reader: str) -> list:
               "cards show how many Closing Blockers are cleared; and the daily email goes to everyone on the team "
               "with Overdue and yesterday's Cleared. New in 2.7: the Training tab is gone (the agent learns from "
               "moved and missing items and your lessons), and the professional checklist takes new checks with "
-              "the checklist password.", "good",
+              "the checklist password. New in 2.8: <b>Previous</b> / <b>Next</b> between deals, and cleared items move "
+              "to the bottom of their section.", "good",
               "What's new in version 2")]
     s.append(PageBreak())
 
@@ -564,6 +565,8 @@ def story(reader: str) -> list:
     s += [table(["At the top", "Meaning"], [
         ["Deal type and Closing chip", "The chip counts the days to closing; it turns orange inside 7 days and red "
                                        "once the date has passed."],
+        ["Previous / Next", "Move to the deal before or after this one in the Deals list as you left it (same tab "
+                            "and search); \"2 of 9\" shows where you are."],
         ["Open Blockers", "Closing Blockers not yet Cleared or Waived. Red until there are none."],
         ["Items Cleared", "Done (Cleared or Waived) out of everything on the list. The bar below fills up as you go."],
         ["Coverage", "100% means every numbered item in Schedule B-I and B-II was accounted for. Anything less comes "
@@ -609,8 +612,8 @@ def story(reader: str) -> list:
                  "The list is the team's live checklist. Keep it current and everyone (the Team Hub and the daily "
                  "email too) stays in step.")
     s += [steps([
-        "<b>Tick the box</b> on the left when an item is done: it becomes <b>Cleared</b> and fades. Tick it again to "
-        "reopen it.",
+        "<b>Tick the box</b> on the left when an item is done: it becomes <b>Cleared</b>, fades and moves to the "
+        "bottom of its section, so what's still open stays on top. Tick it again to reopen it.",
         "Click the <b>status</b> (OPEN, ORDERED…) to pick another one.",
         "Click the <b>date</b> (or <b>Due</b>): the Team Hub's calendar opens. Pick the day, set the time with the "
         "<b>−</b> / <b>+</b> buttons (hour, then minutes in steps of 5; Eastern time, 5:00 PM unless you change it), "

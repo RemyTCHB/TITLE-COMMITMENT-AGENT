@@ -1,6 +1,6 @@
 // Deals (home): every reviewed deal, newest first, with its open Closing Blockers and how many are cleared.
 import { useMemo, useState } from 'preact/hooks';
-import { isOpen, useAllItems, useDeals } from '../data.js';
+import { isOpen, setDealOrder, useAllItems, useDeals } from '../data.js';
 import { go } from '../router.js';
 import { Bar, Icon, PageTitle, PinLine, Ring, Seg, Spinner, Stat, daysUntil, fmtDate } from '../ui.jsx';
 
@@ -52,6 +52,7 @@ export function Deals() {
       && words.every(w => [d.address, d.tc, d.title_company, d.commitment_number, d.deal_type]
         .join(' ').toLowerCase().includes(w)));
   }, [deals, view, q]);
+  if (deals) setDealOrder(shown.map(d => d.id));  // for Previous / Next on the deal page
   const openBlockers = open.reduce((n, d) => n + (itemsByDeal[d.id] || [])
     .filter(i => i.priority === 'blocker' && isOpen(i)).length, 0);
   const closingSoon = open.filter(d => { const n = daysUntil(d.closing_date); return n !== null && n >= 0 && n <= 7; }).length;

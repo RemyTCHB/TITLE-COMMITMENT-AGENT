@@ -86,7 +86,7 @@ function App() {
       <main class="main">
         {user === undefined ? <p class="lede" style="text-align:center"><Spinner /></p>
           : !user ? <Gate error={error} busy={busy} onSignIn={doSignIn} />
-            : page === 'deal' ? <Deal id={arg} me={me} />
+            : page === 'deal' ? <Deal key={arg} id={arg} me={me} />
               : page === 'analyze' ? <Analyze arg={arg} sub={sub} />
                   : page === 'knowledge' ? <Knowledge me={me} />
                     : page === 'team' ? <Team me={me} />

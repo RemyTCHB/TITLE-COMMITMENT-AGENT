@@ -32,6 +32,16 @@ export function useDeals() {
   return { deals, error };
 }
 
+// The Deals list as it was when a deal was opened from it (tab and search included), for Previous / Next on the deal
+// page. Kept as it was: the list itself re-sorts by last change while people work.
+let dealOrder = (() => { try { return JSON.parse(sessionStorage.getItem('tca-deal-order')) || []; } catch { return []; } })();
+export const getDealOrder = () => dealOrder;
+export function setDealOrder(ids) {
+  if (ids.join() === dealOrder.join()) return;
+  dealOrder = ids;
+  try { sessionStorage.setItem('tca-deal-order', JSON.stringify(ids)); } catch { /* private window */ }
+}
+
 export const useDeal = id => useLive(() => (id ? doc(db, 'deals', String(id)) : null), [id]);
 
 export function useItems(dealId) {

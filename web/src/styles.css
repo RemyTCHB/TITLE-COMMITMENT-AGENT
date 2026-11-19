@@ -772,3 +772,11 @@ span.person-chip { cursor: default; }
 .row-sub.learned { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 13px; }
 .check-line { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; font-size: 14px; }
 .check-line .chip { padding: 1px 8px; font-size: 11px; }
+
+/* Previous / Next deal (owner 2026-11-19) */
+.deal-nav { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.deal-nav .link-btn { padding: 4px 8px; }
+.deal-nav .link-btn.off { opacity: 0.35; cursor: default; }
+.deal-nav-n { font-family: var(--font-display); font-weight: 700; font-size: 13px; color: var(--text-muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 640px) { .deal-nav { margin-left: 0; flex: 1 1 100%; justify-content: space-between; } }

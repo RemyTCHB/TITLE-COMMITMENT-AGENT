@@ -74,6 +74,9 @@ sync when a rule changes. (The first Streamlit version and its Neon database wer
   a one-time Firebase sign-in for them marked `imp`, `POST /v1/login-as/back` returns (only from such a sign-in). An
   orange bar shows whose view it is. Changes are recorded "<them> (via <owner>)" (`User.by`); each use goes to
   `audit/` (server only). The engine identity needs `scripts/login_as_setup.sh` once (Auth Viewer + Token Creator).
+- The deal page (owner 2026-11-19): Previous / Next through the Deals list as it was when the deal was opened
+  (`setDealOrder` / `getDealOrder` in `data.js`, kept in sessionStorage; the list itself re-sorts by last change),
+  else the open deals; in each section open items first, then cleared / waived ones (list order otherwise).
 - Moving an item (owner 2026-11-19; the arrows button, `PATCH /v1/deals/{id}/items` with `priority`,
   `flows.move_item`): the person's section wins on re-runs until the agent agrees (`moved_from` keeps the agent's
   pick, `compare.carry_over`). Moving one the agent placed makes one pending "moved" feedback per item (later moves
